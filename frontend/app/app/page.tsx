@@ -515,6 +515,17 @@ function AppScreen() {
             </motion.aside>
             
             <div className="mainapp">
+              <div className="mobile-nav-bar">
+                {['Overview', 'Positions', 'Policies', 'Activity', 'Contracts'].map((tab) => (
+                  <button
+                    key={tab}
+                    className={`mobile-nav-tab ${activeTab === tab ? 'active' : ''}`}
+                    onClick={() => setActiveTab(tab)}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
               <Reveal delay={0.2} className="apptop">
                 <div>
                   <h3>Guardian {activeTab.toLowerCase()}</h3>
