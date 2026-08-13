@@ -1,0 +1,33 @@
+.fluid-marquee {
+  overflow: hidden;
+}
+
+.fluid-marquee__track {
+  display: flex;
+  width: max-content;
+  animation: fluid-marquee-scroll var(--fluid-marquee-duration, 30s) linear infinite;
+}
+
+.fluid-marquee:hover .fluid-marquee__track {
+  animation-play-state: paused;
+}
+
+.fluid-marquee__group {
+  display: flex;
+  flex-shrink: 0;
+}
+
+@keyframes fluid-marquee-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fluid-marquee__track {
+    animation: none;
+  }
+}

@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aegis — Non-custodial AI risk guardian</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#10231e; --ink2:#1b332c; --paper:#f2efe6; --paper2:#e8e4d8;
+  --mint:#4fe0a8; --mint2:#a8f3d1; --forest:#173b31; --forest2:#214c40;
+  --coral:#f47c6c; --amber:#d89b4a; --white:#fbfaf5; --muted:#68766f;
+  --line:rgba(16,35,30,.15); --shadow:0 24px 70px rgba(16,35,30,.14);
+  --mono:"DM Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --sans:"DM Sans",Inter,system-ui,sans-serif; --display:"Fraunces",Georgia,serif;
+}
+*{box-sizing:border-box} html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);line-height:1.45}
+a{color:inherit;text-decoration:none}.wrap{max-width:1220px;margin:auto;padding:0 34px}
+.nav{height:78px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line)}
+.brand{display:flex;gap:10px;align-items:center;font-weight:700;letter-spacing:-.03em}
+.mark{width:28px;height:28px;border:2px solid var(--ink);border-radius:50%;position:relative}
+.mark:before{content:"";position:absolute;left:11px;top:4px;width:3px;height:16px;background:var(--mint);border-radius:3px}
+.navlinks{display:flex;gap:30px;color:#52625b;font-size:14px}.navlinks a:hover{color:var(--ink)}
+.navcta{background:var(--ink);color:var(--white);padding:11px 17px;border-radius:999px;font-size:14px;font-weight:700}
+.hero{padding:76px 0 90px;display:grid;grid-template-columns:1.02fr .98fr;gap:64px;align-items:center}
+.kicker{font:500 12px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:#527066;margin-bottom:22px}
+h1{font:600 clamp(58px,7.2vw,104px)/.91 var(--display);letter-spacing:-.065em;margin:0 0 28px;max-width:700px}
+h1 em{font-style:normal;color:#245e4b}
+.hero p{font-size:19px;max-width:610px;color:#4f5f58;margin:0 0 30px}
+.actions{display:flex;gap:12px;align-items:center}.primary{background:var(--forest);color:var(--white);padding:14px 20px;border-radius:999px;font-weight:700}.secondary{padding:13px 18px;border:1px solid var(--line);border-radius:999px;font-weight:600}
+.mono{font-family:var(--mono)}
+.guardian{
+  background:var(--forest);color:var(--white);border-radius:34px;padding:26px;box-shadow:var(--shadow);
+  min-height:530px;position:relative;overflow:hidden;
+}
+.guardian:before{content:"";position:absolute;width:480px;height:480px;border:1px solid rgba(168,243,209,.12);border-radius:50%;left:-120px;top:80px}
+.guardian:after{content:"";position:absolute;width:300px;height:300px;border:1px solid rgba(168,243,209,.09);border-radius:50%;right:-120px;bottom:-110px}
+.ghead{display:flex;justify-content:space-between;align-items:center;position:relative;z-index:2}
+.live{font:500 11px var(--mono);letter-spacing:.1em;color:var(--mint2)}.live:before{content:"";display:inline-block;width:7px;height:7px;background:var(--mint);border-radius:50%;margin-right:7px}
+.gbody{position:relative;height:400px;margin-top:20px}
+.orbit{position:absolute;left:50%;top:48%;transform:translate(-50%,-50%);width:300px;height:300px;border:1px dashed rgba(168,243,209,.28);border-radius:50%}
+.agent{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:112px;height:112px;border-radius:50%;background:var(--mint);color:var(--ink);display:grid;place-items:center;text-align:center;font-weight:800;box-shadow:0 0 0 14px rgba(79,224,168,.08),0 0 0 1px rgba(255,255,255,.1)}
+.asset{position:absolute;left:50%;top:7%;transform:translateX(-50%);background:#f5f2e9;color:var(--ink);padding:10px 14px;border-radius:12px;font:500 12px var(--mono)}
+.vault{position:absolute;right:2%;bottom:10%;width:122px;height:90px;border:1px solid rgba(168,243,209,.45);background:rgba(255,255,255,.04);border-radius:16px;padding:13px}
+.vault b{display:block;font-size:12px}.vault small{font:400 10px var(--mono);color:#91b4a5}
+.wallet{position:absolute;left:0;bottom:13%;width:130px;height:90px;border:1px solid rgba(244,124,108,.42);background:rgba(244,124,108,.06);border-radius:16px;padding:13px}
+.wallet b{display:block;font-size:12px}.wallet small{font:400 10px var(--mono);color:#d9a9a1}
+.flow{position:absolute;left:50%;top:50%;width:154px;height:1px;background:linear-gradient(90deg,transparent,var(--mint));transform:translateY(40px)}
+.flow:after{content:"";position:absolute;right:0;top:-4px;border-left:7px solid var(--mint);border-top:4px solid transparent;border-bottom:4px solid transparent}
+.block{position:absolute;left:52%;top:55%;width:100px;border-top:1px solid var(--coral);transform:rotate(-28deg)}
+.block:after{content:"×";position:absolute;right:-7px;top:-15px;color:var(--coral);font-size:22px;font-family:var(--mono)}
+.glabel{position:absolute;left:50%;top:82%;transform:translateX(-50%);font:500 11px var(--mono);letter-spacing:.06em;color:#b9d5ca;white-space:nowrap}
+.guardian-note{position:absolute;left:26px;bottom:22px;font-size:12px;color:#8fa99f;z-index:2}.guardian-note strong{color:var(--mint2)}
+.band{background:var(--forest);color:var(--white);padding:22px 0}.bandrow{display:flex;justify-content:space-between;gap:20px;align-items:center}.bandrow span{font:500 12px var(--mono);color:#a6c3b7}.bandrow strong{font-size:15px}
+.section{padding:110px 0}.section.alt{background:var(--paper2)}
+.eyebrow{font:500 12px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:#5d756b}
+.section h2{font:600 clamp(42px,5vw,70px)/.98 var(--display);letter-spacing:-.055em;margin:14px 0 20px;max-width:780px}
+.section .intro{max-width:620px;color:#5b6962;font-size:17px}
+.policy-demo{margin-top:50px;display:grid;grid-template-columns:1.05fr .95fr;gap:0;background:var(--white);border-radius:28px;overflow:hidden;box-shadow:0 18px 55px rgba(16,35,30,.09)}
+.inputside{padding:34px;border-right:1px solid var(--line)}.parseside{padding:34px;background:#f8f6ef}
+.label{font:500 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:#728078}
+.prompt{font:500 25px/1.35 var(--display);margin:16px 0 26px;max-width:600px}
+.cursor{display:inline-block;width:2px;height:24px;background:var(--mint);vertical-align:-4px;animation:blink 1s infinite}@keyframes blink{50%{opacity:0}}
+.chips{display:flex;gap:8px;flex-wrap:wrap}.chip{font:500 11px var(--mono);padding:7px 9px;border-radius:999px;background:#e6f7ee;color:#245e4b}.chip.default{background:#eceae1;color:#6e7771}
+.paramgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:20px}.param{background:var(--white);border:1px solid var(--line);padding:17px;border-radius:14px}.param small{display:block;color:#7a847f;font:400 10px var(--mono);text-transform:uppercase}.param b{display:block;margin-top:7px;font:500 22px var(--mono)}.specified{box-shadow:inset 3px 0 0 var(--mint)}.fallback{box-shadow:inset 3px 0 0 #c8c4b8}
+.note{margin-top:17px;font-size:12px;color:#747f79}.note span{color:#245e4b;font-weight:700}
+.steps{margin-top:58px;display:grid;grid-template-columns:repeat(5,1fr);border-top:1px solid var(--line)}
+.step{padding:25px 18px 25px 0;border-right:1px solid var(--line);min-height:205px}.step:not(:first-child){padding-left:18px}.step:last-child{border-right:0}
+.num{font:500 11px var(--mono);color:#698078}.step h3{font:600 20px var(--display);margin:26px 0 8px}.step p{font-size:13px;color:#69766f;max-width:180px}
+.asset-intro{display:flex;justify-content:space-between;align-items:end;gap:30px}.assetlist{margin-top:45px;display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line)}
+.assetcard{background:var(--paper);padding:27px;min-height:210px}.assettop{display:flex;justify-content:space-between}.ticker{font:500 16px var(--mono)}.verified{font:500 10px var(--mono);color:#2d6b56}.assetname{font:500 25px var(--display);margin-top:34px}.assetmeta{font:400 11px var(--mono);color:#718078;margin-top:9px}.assetline{margin-top:27px;border-top:1px solid var(--line);padding-top:12px;font-size:12px;color:#5e6b65}
+.boundary{display:grid;grid-template-columns:1fr 1fr;margin-top:55px}.can,.cannot{padding:36px}.can{background:var(--forest);color:var(--white);border-radius:24px 0 0 24px}.cannot{background:#e7d9d2;border-radius:0 24px 24px 0}.boundary h3{font:600 34px var(--display);margin:0 0 20px}.boundary ul{list-style:none;padding:0;margin:0}.boundary li{padding:13px 0;border-top:1px solid rgba(255,255,255,.14);font-size:14px}.cannot li{border-color:rgba(16,35,30,.12)}.tick{color:var(--mint);font-family:var(--mono);margin-right:9px}.cross{color:var(--coral);font-family:var(--mono);margin-right:9px}
+.app{background:#0e211c;color:var(--white);padding:90px 0}.appgrid{display:grid;grid-template-columns:230px 1fr;gap:0;background:#142b24;border:1px solid rgba(255,255,255,.08);border-radius:26px;overflow:hidden;min-height:680px}
+.sidebar{padding:24px;border-right:1px solid rgba(255,255,255,.08)}.sbrand{font-weight:700;margin-bottom:50px}.navitem{padding:11px 12px;color:#91aaa0;font-size:13px;border-radius:9px;margin-bottom:3px}.navitem.active{background:#203e34;color:var(--white)}.sidefoot{position:relative;margin-top:210px;font:400 10px var(--mono);color:#6e8b80}
+.mainapp{padding:28px 32px}.apptop{display:flex;justify-content:space-between;align-items:center}.apptop h3{font:600 30px var(--display);margin:0}.walletpill{font:400 11px var(--mono);border:1px solid rgba(255,255,255,.12);padding:9px 12px;border-radius:999px;color:#9bb4aa}
+.appcards{display:grid;grid-template-columns:1.15fr .85fr;gap:15px;margin-top:25px}.appcard{background:#f2efe6;color:var(--ink);border-radius:18px;padding:20px}.appcard.dark{background:#1c3930;color:var(--white)}.appcard h4{margin:0 0 14px;font-size:12px;text-transform:uppercase;letter-spacing:.08em;font-family:var(--mono);font-weight:500}.balance{font:500 38px var(--mono)}.sub{font-size:12px;color:#6d7b74}.riskbar{height:9px;background:#d9d6cc;border-radius:99px;margin:22px 0 9px;overflow:hidden}.riskbar i{display:block;height:100%;width:31%;background:var(--mint)}.appcard.dark .sub{color:#9bb5aa}.policyrow{display:flex;justify-content:space-between;border-top:1px solid var(--line);padding:11px 0;font:400 11px var(--mono)}.guardstate{display:flex;gap:8px;align-items:center;color:#b8f3d6;font:500 11px var(--mono)}.guarddot{width:7px;height:7px;background:var(--mint);border-radius:50%}
+.activity{margin-top:15px;background:#102820;border-radius:18px;padding:20px}.activity h4{font:500 11px var(--mono);text-transform:uppercase;color:#78968b;margin:0 0 12px}.event{display:grid;grid-template-columns:95px 1fr 80px;gap:12px;padding:13px 0;border-top:1px solid rgba(255,255,255,.07);font-size:12px}.event span{font-family:var(--mono);color:#78968b}.status{color:var(--mint2);text-align:right}
+.cta{padding:115px 0;background:var(--paper)}.ctabox{background:var(--forest);color:var(--white);border-radius:30px;padding:65px;display:flex;justify-content:space-between;align-items:end;gap:30px}.ctabox h2{color:var(--white);margin:10px 0 0;max-width:700px}.ctabox p{color:#a7c0b5;max-width:500px}.footer{padding:30px 0;border-top:1px solid var(--line);font:400 11px var(--mono);color:#77837d;display:flex;justify-content:space-between}
+@media(max-width:900px){.hero,.policy-demo,.boundary,.appgrid,.appcards{grid-template-columns:1fr}.hero{padding-top:55px}.guardian{min-height:470px}.inputside{border-right:0;border-bottom:1px solid var(--line)}.steps{grid-template-columns:1fr 1fr}.assetlist{grid-template-columns:1fr}.can,.cannot{border-radius:20px}.boundary{gap:10px}.ctabox{display:block;padding:40px}.navlinks{display:none}.sidebar{display:none}}
+@media(max-width:560px){.wrap{padding:0 18px}h1{font-size:58px}.steps{grid-template-columns:1fr}.guardian{padding:20px}.orbit{width:240px;height:240px}.asset{top:0}.wallet{left:-10px}.vault{right:-10px}.paramgrid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header class="wrap nav">
+  <a class="brand" href="#"><span class="mark"></span>Aegis</a>
+  <nav class="navlinks"><a href="#demo">Policy</a><a href="#flow">How it works</a><a href="#assets">Assets</a><a href="#boundary">Trust boundary</a></nav>
+  <a class="navcta" href="#app">Open the app ↗</a>
+</header>
+
+<main>
+<section class="wrap hero">
+  <div>
+    <div class="kicker">X Layer · non-custodial risk infrastructure</div>
+    <h1>Protection that <em>can watch.</em><br>Not custody.</h1>
+    <p>Aegis is an AI risk guardian for tokenized real-world assets and DeFi positions. You write the rule. Your vault enforces the boundary. The agent watches the market — and has only one narrow action when your condition is breached.</p>
+    <div class="actions"><a class="primary" href="#app">Open the app</a><a class="secondary" href="#demo">See the policy parser ↓</a></div>
+  </div>
+  <div class="guardian">
+    <div class="ghead"><span class="live">GUARDIAN ONLINE</span><span class="mono" style="font-size:11px;color:#78968b">X LAYER · 24/7</span></div>
+    <div class="gbody">
+      <div class="asset">GLDX · price + oracle</div>
+      <div class="orbit"></div>
+      <div class="agent">WATCH<br><span style="font:500 10px var(--mono)">read-only</span></div>
+      <div class="flow"></div>
+      <div class="block"></div>
+      <div class="wallet"><b>YOUR WALLET</b><small>withdraw anytime</small></div>
+      <div class="vault"><b>RECOVERY VAULT</b><small>only approved route</small></div>
+      <div class="glabel">one pre-approved route · nothing else</div>
+    </div>
+    <div class="guardian-note"><strong>0 custody</strong> · no withdrawal key · no policy mutation · no arbitrary recipient</div>
+  </div>
+</section>
+
+<div class="band"><div class="wrap bandrow"><span>THE CORE PROMISE</span><strong>Watches prices → verifies breach → pauses or routes → records proof. Never owns the position.</strong></div></div>
+
+<section class="wrap section" id="demo">
+  <div class="eyebrow">01 / Plain English → policy</div>
+  <h2>Tell Aegis what “risk” means to you.</h2>
+  <p class="intro">The parser turns one sentence into explicit contract parameters. Values you actually specify stay visually distinct from safe defaults the parser supplies.</p>
+  <div class="policy-demo">
+    <div class="inputside">
+      <div class="label">Your policy</div>
+      <div class="prompt">“Cautious: exit 30% on a 5% drawdown or 1% oracle deviation<span class="cursor"></span>”</div>
+      <div class="chips"><span class="chip">5% drawdown</span><span class="chip">1% oracle deviation</span><span class="chip">30% exit</span><span class="chip default">cautious → default</span></div>
+      <div class="note"><span>● Green</span> = explicitly stated · <span style="color:#777">● Grey</span> = parser fallback</div>
+    </div>
+    <div class="parseside">
+      <div class="label">On-chain policy preview</div>
+      <div class="paramgrid">
+        <div class="param specified"><small>Drawdown</small><b>5.00%</b></div>
+        <div class="param specified"><small>Oracle deviation</small><b>1.00%</b></div>
+        <div class="param specified"><small>Exit percentage</small><b>30%</b></div>
+        <div class="param fallback"><small>Risk mode</small><b>CAUTIOUS</b></div>
+      </div>
+      <div class="note">Policy hash <span class="mono">0x7a91…e31c</span> · immutable after signature</div>
+    </div>
+  </div>
+</section>
+
+<section class="section alt" id="flow">
+<div class="wrap">
+  <div class="eyebrow">02 / The loop</div>
+  <h2>Set once. The boundary stays on-chain.</h2>
+  <p class="intro">Aegis separates observation from authority. The agent can interpret signals and call only the functions your vault already permits.</p>
+  <div class="steps">
+    <div class="step"><span class="num">01</span><h3>Deposit</h3><p>Place a supported tokenized asset or stablecoin in your vault.</p></div>
+    <div class="step"><span class="num">02</span><h3>Write</h3><p>Describe your risk tolerance in plain English and review the parsed policy.</p></div>
+    <div class="step"><span class="num">03</span><h3>Watch</h3><p>The agent reads price and oracle-health signals continuously.</p></div>
+    <div class="step"><span class="num">04</span><h3>Defend</h3><p>A confirmed breach triggers only pause or the approved route to recovery.</p></div>
+    <div class="step"><span class="num">05</span><h3>Withdraw</h3><p>You retain withdrawal control at every point — online or offline.</p></div>
+  </div>
+</div>
+</section>
+
+<section class="wrap section" id="assets">
+  <div class="asset-intro"><div><div class="eyebrow">03 / What it guards</div><h2>Real assets. Explicit boundaries.</h2></div><p class="intro">Designed around the growing onchain RWA market: tokenized equities, commodities and stablecoins. Demo registry below uses SPYX, GLDX and USDC as product examples.</p></div>
+  <div class="assetlist">
+    <div class="assetcard"><div class="assettop"><span class="ticker">SPYX</span><span class="verified">DEMO REGISTRY</span></div><div class="assetname">S&P 500 exposure</div><div class="assetmeta">TOKENIZED EQUITY · EVM</div><div class="assetline">Price source · oracle feed · policy-aware</div></div>
+    <div class="assetcard"><div class="assettop"><span class="ticker">GLDX</span><span class="verified">DEMO REGISTRY</span></div><div class="assetname">Gold exposure</div><div class="assetmeta">TOKENIZED COMMODITY · EVM</div><div class="assetline">Price source · oracle feed · policy-aware</div></div>
+    <div class="assetcard"><div class="assettop"><span class="ticker">USDC</span><span class="verified">STABLECOIN</span></div><div class="assetname">Dollar liquidity</div><div class="assetmeta">ERC-20 · LIQUIDITY BUFFER</div><div class="assetline">Recovery destination · time-locked vault</div></div>
+  </div>
+</section>
+
+<section class="section alt" id="boundary">
+<div class="wrap">
+  <div class="eyebrow">04 / Trust boundary</div>
+  <h2>The agent is deliberately underpowered.</h2>
+  <p class="intro">That is the feature. Intelligence lives outside the vault; authority is reduced to a tiny, auditable surface.</p>
+  <div class="boundary">
+    <div class="can"><h3>It CAN</h3><ul><li><span class="tick">+</span>Read price and oracle-health data</li><li><span class="tick">+</span>Compare signals against your signed thresholds</li><li><span class="tick">+</span>Pause a position when permitted</li><li><span class="tick">+</span>Route the approved percentage to the time-locked recovery vault</li></ul></div>
+    <div class="cannot"><h3>It NEVER can</h3><ul><li><span class="cross">×</span>Withdraw funds to itself or an arbitrary address</li><li><span class="cross">×</span>Send funds anywhere except the recovery vault</li><li><span class="cross">×</span>Change, loosen or rewrite your policy</li><li><span class="cross">×</span>Block, delay or override your withdrawal</li></ul></div>
+  </div>
+</div>
+</section>
+
+<section class="app" id="app">
+<div class="wrap">
+  <div class="eyebrow" style="color:#86a69a">05 / Product UI</div>
+  <h2 style="color:white">A calm control room, not a trading casino.</h2>
+  <div class="appgrid">
+    <aside class="sidebar"><div class="sbrand">Aegis</div><div class="navitem active">Overview</div><div class="navitem">Positions</div><div class="navitem">Policies</div><div class="navitem">Activity</div><div class="navitem">Contracts</div><div class="sidefoot">X LAYER · TESTNET<br>guardian v0.1</div></aside>
+    <div class="mainapp">
+      <div class="apptop"><h3>Guardian overview</h3><span class="walletpill">0x8a…91c4 · connected</span></div>
+      <div class="appcards">
+        <div class="appcard"><h4>Protected balance</h4><div class="balance">$24,680.12</div><div class="sub">3 positions · 2 policies active</div><div class="riskbar"><i></i></div><div class="sub">Current risk score <b style="color:var(--ink)">31 / 100</b></div></div>
+        <div class="appcard dark"><h4>Guardian state</h4><div class="guardstate"><span class="guarddot"></span> WATCHING · NO ACTION</div><p style="font:500 22px var(--display);margin:25px 0 10px">Watching, not touching.</p><div class="sub">Last oracle check <span class="mono">14s ago</span></div></div>
+      </div>
+      <div class="appcard" style="margin-top:15px"><h4>Active policy · GLDX</h4><div class="policyrow"><span>Drawdown threshold</span><b>12.00%</b></div><div class="policyrow"><span>Oracle deviation</span><b>1.00%</b></div><div class="policyrow"><span>Approved route</span><b>75% → recovery vault</b></div><div class="policyrow"><span>Withdrawal</span><b style="color:#2d6b56">ALWAYS AVAILABLE</b></div></div>
+      <div class="activity"><h4>Recent verification events</h4><div class="event"><span>16:00:41</span><div>GLDX price checked against oracle</div><div class="status">CLEAR</div></div><div class="event"><span>15:59:28</span><div>Policy integrity hash verified</div><div class="status">MATCH</div></div><div class="event"><span>15:58:04</span><div>Recovery vault route permission checked</div><div class="status">LOCKED</div></div></div>
+    </div>
+  </div>
+</div>
+</section>
+
+<section class="wrap cta"><div class="ctabox"><div><div class="eyebrow" style="color:#86a69a">06 / Final word</div><h2>Give the agent eyes.<br>Keep the keys.</h2><p>Non-custodial AI risk protection for RWA and DeFi positions on X Layer — with the authority boundary designed into the vault itself.</p></div><a class="primary" style="background:var(--mint);color:var(--ink)" href="#app">Open Aegis ↗</a></div></section>
+</main>
+
+<footer class="wrap footer"><span>AEGIS · X LAYER · HACKATHON CONCEPT</span><span>WATCH · VERIFY · DEFEND · RECORD</span></footer>
+
+<script>
+const prompts=[
+  "“If GLDX falls 12%, move 75% to USDC immediately”",
+  "“Cautious: exit 30% on a 5% drawdown or 1% oracle deviation”",
+  "“Pause if the oracle moves more than 2% from market price”"
+];
+let i=0;
+const el=document.querySelector('.prompt');
+setInterval(()=>{i=(i+1)%prompts.length; el.innerHTML=prompts[i]+'<span class="cursor"></span>';},4200);
+</script>
+</body>
+</html>

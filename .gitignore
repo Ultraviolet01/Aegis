@@ -1,0 +1,23 @@
+# Foundry
+out/
+cache/
+broadcast/
+lib/
+
+# Secrets — agent key, deployer key, OKX API creds must NEVER be committed
+.env
+.env.*
+!.env.example
+*.key
+keystore/
+
+# Node
+node_modules/
+.next/
+dist/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini

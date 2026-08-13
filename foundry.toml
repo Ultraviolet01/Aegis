@@ -1,0 +1,54 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+
+# See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
+
+# X Layer RPCs, per PROJECT_BRIEF.md §3. Testnet is chain 1952 — the older
+# 195 seen in some guides is stale. Gas token is OKB on both networks.
+[rpc_endpoints]
+xlayer_testnet = "https://testrpc.xlayer.tech/terigon"
+xlayer_testnet_okx = "https://xlayertestrpc.okx.com/terigon"
+xlayer_mainnet = "https://rpc.xlayer.tech"
+xlayer_mainnet_okx = "https://xlayerrpc.okx.com"
+
+# Contract verification (DONE on testnet — see DEPLOYMENTS.md)
+# ------------------------------------------------------------
+# X Layer verifies through OKLink's plugin endpoint, which uses Foundry's
+# dedicated `oklink` verifier rather than the etherscan-compatible flow — so
+# it is driven by CLI flags, not an [etherscan] block here.
+#
+# Just run:  scripts\verify-testnet.cmd
+#
+# Or by hand:
+#   forge verify-contract <address> src/Foo.sol:Foo \
+#     --chain 1952 \
+#     --verifier oklink \
+#     --verifier-url https://www.oklink.com/api/v5/explorer/contract/verify-source-code-plugin/XLAYER_TESTNET \
+#     --api-key <any-non-empty-string> \
+#     --compiler-version v0.8.33+commit.64118f21 \
+#     --constructor-args <abi-encoded>
+#
+# Swap the trailing path segment per network:
+#   XLAYER_TESTNET  -> chain 1952
+#   XLAYER          -> chain 196
+#
+# NO API KEY IS NEEDED on the testnet route — proved by verifying a contract with
+# a deliberately invalid key. Foundry requires the flag, OKLink ignores its value.
+#
+# MAINNET IS A SEPARATE QUESTION, deliberately not pre-tested. Assume it needs a
+# real OKLINK_API_KEY until a control test with an invalid key proves otherwise,
+# and re-run the bytecode preflight against the mainnet addresses first.
+# See "Mainnet verification" in DEPLOYMENTS.md.
+#
+# TWO SETTINGS THAT MUST MATCH THE DEPLOYED BUILD, or verification fails:
+#   * --compiler-version v0.8.33, NOT the 0.8.24 in the pragma. The pragma floats
+#     (^0.8.24) and Foundry resolved 0.8.33.
+#   * Do NOT pass --num-of-optimizations. The optimizer was DISABLED for this
+#     build (Foundry's default), and passing the flag implies it was enabled.
+# Confirm both against on-chain code first: node scripts\verify-xlayer.mjs preflight
+#
+# See DEPLOY_TESTNET.md section 6 for per-contract constructor args.
+
+

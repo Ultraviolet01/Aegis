@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{BRAND}}: Design System</title>
+  <!-- Source of truth. Showcases every token + base component. Toggle theme top-right. -->
+  <link rel="stylesheet" href="./tokens.css" />
+  <style>
+    body { margin: 0; padding: var(--space-12) var(--space-8); }
+    .wrap { max-width: 960px; margin-inline: auto; display: flex; flex-direction: column; gap: var(--space-12); }
+    h1 { font-size: var(--fs-hero); margin: 0; }
+    h2 { font-size: var(--fs-2xl); margin: 0 0 var(--space-4); }
+    .muted { color: var(--text-secondary); }
+    .row { display: flex; flex-wrap: wrap; gap: var(--space-4); align-items: center; }
+    .swatch { width: 84px; height: 84px; border-radius: var(--radius-card); border: 1px solid var(--separator); display: flex; align-items: flex-end; padding: 6px; font-size: 11px; color: #fff; }
+    .scale > * { margin: 0 0 var(--space-2); font-family: var(--font-display); letter-spacing: -0.02em; }
+    .toggle { position: fixed; top: 16px; right: 16px; }
+  </style>
+</head>
+<body>
+  <button class="btn btn--outline toggle" onclick="document.documentElement.toggleAttribute('data-theme-dark'); document.documentElement.setAttribute('data-theme', document.documentElement.hasAttribute('data-theme-dark') ? 'dark' : 'light')">Thème</button>
+  <div class="wrap">
+    <header>
+      <h1>{{BRAND}}</h1>
+      <p class="muted">Design system · {{PERSONALITY}} · {{DISPLAY_FONT}} + {{BODY_FONT}}</p>
+    </header>
+
+    <section>
+      <h2>Couleurs</h2>
+      <div class="row">
+        <div class="swatch" style="background:var(--brand)">brand</div>
+        <div class="swatch" style="background:var(--accent)">accent</div>
+        <div class="swatch" style="background:var(--success)">success</div>
+        <div class="swatch" style="background:var(--danger)">danger</div>
+        <div class="swatch" style="background:var(--surface); color:var(--text); border-color:var(--separator)">surface</div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Typographie</h2>
+      <div class="scale">
+        <div style="font-size:var(--fs-hero)">Hero 56</div>
+        <div style="font-size:var(--fs-4xl)">Titre 40</div>
+        <div style="font-size:var(--fs-xl)">Sous-titre 24</div>
+        <p style="font-family:var(--font-body); font-size:var(--fs-base)" class="muted">Corps 16. Le renard brun rapide saute par dessus le chien paresseux. 1 234 567.</p>
+      </div>
+    </section>
+
+    <section>
+      <h2>Boutons</h2>
+      <div class="row">
+        <a class="btn btn--primary">Action principale</a>
+        <a class="btn btn--outline">Secondaire</a>
+      </div>
+    </section>
+
+    <section>
+      <h2>Carte & badge</h2>
+      <div class="card" style="max-width:340px; padding:var(--space-6)">
+        <span class="badge badge--success">Nouveau</span>
+        <h3 style="margin:0; font-size:var(--fs-xl)">Titre de carte</h3>
+        <p class="muted" style="margin:0">Texte secondaire de la carte, sur une surface tokenisée.</p>
+        <a class="btn btn--primary" style="align-self:flex-start">En savoir plus</a>
+      </div>
+    </section>
+  </div>
+</body>
+</html>
