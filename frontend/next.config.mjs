@@ -13,7 +13,7 @@ loadEnv({ path: resolve(here, '../.env') });
 const nextConfig = {
   reactStrictMode: true,
 
-  outputFileTracingRoot: resolve(here, '..'),
+  ...(process.env.VERCEL ? {} : { outputFileTracingRoot: resolve(here, '..') }),
 
   devIndicators: false,
 
@@ -22,11 +22,11 @@ const nextConfig = {
   // NEXT_PUBLIC_ variable would inline them into the client bundle and leak
   // the API secret to every visitor.
   env: {
-    NEXT_PUBLIC_AEGIS_NETWORK: process.env.AEGIS_NETWORK ?? 'testnet',
-    NEXT_PUBLIC_AEGIS_VAULT_ADDRESS: process.env.AEGIS_VAULT_ADDRESS ?? '',
-    NEXT_PUBLIC_POLICY_REGISTRY_ADDRESS: process.env.POLICY_REGISTRY_ADDRESS ?? '',
-    NEXT_PUBLIC_RISK_ORACLE_ADDRESS: process.env.RISK_ORACLE_ADDRESS ?? '',
-    NEXT_PUBLIC_EMERGENCY_VAULT_ADDRESS: process.env.EMERGENCY_VAULT_ADDRESS ?? '',
+    NEXT_PUBLIC_AEGIS_NETWORK: process.env.NEXT_PUBLIC_AEGIS_NETWORK ?? process.env.AEGIS_NETWORK ?? 'mainnet',
+    NEXT_PUBLIC_AEGIS_VAULT_ADDRESS: process.env.NEXT_PUBLIC_AEGIS_VAULT_ADDRESS ?? process.env.AEGIS_VAULT_ADDRESS ?? '',
+    NEXT_PUBLIC_POLICY_REGISTRY_ADDRESS: process.env.NEXT_PUBLIC_POLICY_REGISTRY_ADDRESS ?? process.env.POLICY_REGISTRY_ADDRESS ?? '',
+    NEXT_PUBLIC_RISK_ORACLE_ADDRESS: process.env.NEXT_PUBLIC_RISK_ORACLE_ADDRESS ?? process.env.RISK_ORACLE_ADDRESS ?? '',
+    NEXT_PUBLIC_EMERGENCY_VAULT_ADDRESS: process.env.NEXT_PUBLIC_EMERGENCY_VAULT_ADDRESS ?? process.env.EMERGENCY_VAULT_ADDRESS ?? '',
   },
 };
 

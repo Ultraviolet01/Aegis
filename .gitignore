@@ -1,4 +1,4 @@
-# Foundry
+# Foundry build output
 out/
 cache/
 broadcast/
@@ -6,18 +6,34 @@ lib/
 
 # Secrets — agent key, deployer key, OKX API creds must NEVER be committed
 .env
-.env.*
+.env.local
+.env.*.local
+.env.mainnet
+.env.testnet
 !.env.example
 *.key
 keystore/
 
-# Node
+# Node & Next.js
 node_modules/
 .next/
 dist/
 *.log
+*.tsbuildinfo
 
-# OS
+# Agent & IDE tooling / scratch files
+.agents/
+.claude/
+.kilo/
+.gemini/
+.vscode/
+.idea/
+.mcp.json
+skills-lock.json
+aegis_landing_mockup.html
+/vid.mp4
+
+# OS junk
 .DS_Store
 Thumbs.db
 desktop.ini
