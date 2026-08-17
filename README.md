@@ -48,8 +48,7 @@ graph TD
     User -->|"4. Sign policy & deposit collateral"| Vault
     Dashboard -->|"5. Store policy hash & parameters"| Registry
 
-    Agent -->|"6. Monitor reference asset prices"| Oracle
-    Agent -->|"6. Query DEX liquidity & price impact"| OKX_API
+    Agent -->|"6. Query DEX liquidity, price impact, and reference prices"| OKX_API
     Agent -->|"7. Evaluate drawdown vs Policy threshold"| Registry
 
     Agent --"8. On Breach: Trigger bounded action"--> Vault
@@ -101,7 +100,7 @@ All core smart contracts are deployed, active, and **100% source-verified on OKL
 
 ## 🗺️ Product Roadmap
 
-### 📍 Phase 1: X Layer Mainnet & Core Guardian (Q3 2026 — Completed)
+### 📍 Phase 1: X Layer Mainnet & Core Guardian (Q3 2026 — Live on Mainnet)
 - [x] Deploy & source-verify smart contracts on X Layer Mainnet (Chain 196).
 - [x] Launch natural language LLM policy parser (Anthropic Claude integration).
 - [x] Deploy off-chain AI guardian monitoring engine with OKX DEX quote verification.
@@ -109,7 +108,7 @@ All core smart contracts are deployed, active, and **100% source-verified on OKL
 
 ### 📍 Phase 2: Multi-Asset Expansion & Advanced Risk Engine (Q4 2026)
 - [ ] Support additional tokenized Real-World Assets (Tokenized US Treasuries, Commodities, Equities).
-- [ ] Implement multi-oracle aggregation (Pyth Network + Chainlink + OKX DEX TWAP quotes).
+- [ ] Explore supplementary price-verification sources for assets with thin DEX liquidity, as a redundancy layer alongside live OKX DEX quotes.
 - [ ] Add statistical rolling z-score volatility triggers for proactive position pausing before sharp market drops.
 - [ ] Automated user notifications via Telegram / Email webhooks on policy breaches.
 
