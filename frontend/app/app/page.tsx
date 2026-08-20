@@ -121,7 +121,7 @@ function AppScreen() {
   const activePolicy = account ? onChainPolicy : (demoPolicy.active ? demoPolicy : undefined);
   const activeHistory = account ? history : demoHistory;
   
-  const latestScore = activeHistory.find((d) => d.score !== undefined)?.score ?? 31;
+  const latestScore = activeHistory.find((d) => d.score !== undefined)?.score ?? 0;
   const hasScore = latestScore !== undefined;
 
   const loadPositions = useCallback(async (owner: Address) => {
