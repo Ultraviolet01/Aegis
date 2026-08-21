@@ -2,7 +2,7 @@
 out/
 cache/
 broadcast/
-lib/
+/lib/
 
 # Secrets — agent key, deployer key, OKX API creds must NEVER be committed
 .env
