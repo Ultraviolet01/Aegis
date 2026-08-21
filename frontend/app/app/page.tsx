@@ -143,124 +143,143 @@ function AppScreen() {
   const hasScore = latestScore !== undefined;
 
   const loadPositions = useCallback(async (owner: Address) => {
-    if (!ready) return;
+    if (!ready || !contracts.vault) return;
 
-    // Reset current position & policy state immediately to avoid stale flash from previous wallet
-    setPositions([]);
-    setSelectedId('');
-    setOnChainPolicy(undefined);
-    setHistory([]);
-    setClaims([]);
-
-    // Scalable per-wallet position lookup via getLogs on PositionOpened event (filtered by owner topic)
-    let targetIds: bigint[] = [];
     try {
-      const logs = await publicClient.getLogs({
-        address: contracts.vault as Address,
-        event: {
-          type: 'event',
-          name: 'PositionOpened',
-          inputs: [
-            { name: 'positionId', type: 'uint256', indexed: true },
-            { name: 'owner', type: 'address', indexed: true },
-            { name: 'asset', type: 'address', indexed: true },
-            { name: 'amount', type: 'uint256', indexed: false },
-          ],
-        },
-        args: {
-          owner,
-        },
-        fromBlock: 0n,
-      });
-
-      const uniqueIds = new Set<bigint>();
-      for (const log of logs) {
-        if (log.args.positionId !== undefined) {
-          uniqueIds.add(log.args.positionId);
-        }
-      }
-      targetIds = Array.from(uniqueIds);
-    } catch {
-      // Fallback: scan nextPositionId if log querying fails on certain RPC nodes
+      // 1. Fetch total positions count in 1 single fast call
       const nextId = (await publicClient.readContract({
         address: contracts.vault as Address,
         abi: aegisVaultAbi,
         functionName: 'nextPositionId',
       })) as bigint;
-      for (let id = 1n; id < nextId; id++) {
-        targetIds.push(id);
-      }
-    }
 
-    const found: Position[] = [];
-    const userClaims: EmergencyClaimItem[] = [];
-
-    for (const id of targetIds) {
-      const [posOwner, asset, amount, pausedByAgent, exists] = (await publicClient.readContract({
-        address: contracts.vault as Address,
-        abi: aegisVaultAbi,
-        functionName: 'positions',
-        args: [id],
-      })) as readonly [Address, Address, bigint, boolean, boolean];
-
-      if (!exists) continue;
-      if (posOwner.toLowerCase() !== owner.toLowerCase()) continue;
-
-      const [decimals, symbol] = await Promise.all([
-        publicClient.readContract({ address: asset, abi: erc20Abi, functionName: 'decimals' }) as Promise<number>,
-        publicClient.readContract({ address: asset, abi: erc20Abi, functionName: 'symbol' }).catch(() => 'TOKEN') as Promise<string>,
-      ]);
-
-      if (amount > 0n) {
-        found.push({ id, asset, amount, pausedByAgent, symbol, decimals: Number(decimals) });
+      const totalCount = Number(nextId) - 1;
+      if (totalCount <= 0) {
+        setPositions([]);
+        setClaims([]);
+        return;
       }
 
-      // Query emergency claims on this position
-      if (contracts.emergencyVault) {
-        try {
-          const count = (await publicClient.readContract({
-            address: contracts.emergencyVault as Address,
-            abi: emergencyVaultAbi,
-            functionName: 'claimCount',
-            args: [id],
-          })) as bigint;
+      const allIds = Array.from({ length: totalCount }, (_, i) => BigInt(i + 1));
 
-          for (let i = 0n; i < count; i++) {
-            const claim = (await publicClient.readContract({
-              address: contracts.emergencyVault as Address,
-              abi: emergencyVaultAbi,
-              functionName: 'claimsByPosition',
-              args: [id, i],
-            })) as readonly [Address, Address, bigint, bigint, boolean];
+      // 2. Fetch all position details in PARALLEL (simultaneous batch)
+      const rawPositions = await Promise.all(
+        allIds.map(async (id) => {
+          try {
+            const [posOwner, asset, amount, pausedByAgent, exists] = (await publicClient.readContract({
+              address: contracts.vault as Address,
+              abi: aegisVaultAbi,
+              functionName: 'positions',
+              args: [id],
+            })) as readonly [Address, Address, bigint, boolean, boolean];
 
-            const [claimOwner, claimAsset, claimAmount, claimableAt, claimed] = claim;
-            if (claimOwner.toLowerCase() === owner.toLowerCase()) {
-              const isReady = Math.floor(Date.now() / 1000) >= Number(claimableAt);
-              userClaims.push({
-                positionId: id,
-                positionNumber: found.length || 1,
-                claimIndex: i,
-                asset: claimAsset,
-                symbol,
-                decimals: Number(decimals),
-                amount: claimAmount,
-                formattedAmount: (Number(claimAmount) / 10 ** Number(decimals)).toFixed(2),
-                claimableAt: Number(claimableAt),
-                claimed,
-                isReady,
-              });
+            if (!exists || posOwner.toLowerCase() !== owner.toLowerCase()) return null;
+            return { id, asset, amount, pausedByAgent };
+          } catch {
+            return null;
+          }
+        })
+      );
+
+      const userRawPositions = rawPositions.filter((p): p is NonNullable<typeof p> => p !== null && p.amount > 0n);
+
+      // Known token cache for instant resolution
+      const KNOWN_TOKENS: Record<string, { symbol: string; decimals: number }> = {
+        '0x7d2a9f61f641538787ba6052a8c496c749afbfd1': { symbol: 'tUSDC', decimals: 6 },
+        '0xa7218e99738f3d83f6c2b85b2b5f13f6e709a3df': { symbol: 'tGLDX', decimals: 18 },
+        '0x28ad1826640a3b840bd13e0c0900de8c75c6491c': { symbol: 'tSPYX', decimals: 18 },
+      };
+
+      // 3. Resolve metadata and claims in parallel
+      const userPositions: Position[] = [];
+      const userClaims: EmergencyClaimItem[] = [];
+
+      await Promise.all(
+        userRawPositions.map(async (pos, idx) => {
+          const lowerAsset = pos.asset.toLowerCase();
+          let symbol = KNOWN_TOKENS[lowerAsset]?.symbol;
+          let decimals = KNOWN_TOKENS[lowerAsset]?.decimals;
+
+          if (!symbol || decimals === undefined) {
+            try {
+              const [dec, sym] = await Promise.all([
+                publicClient.readContract({ address: pos.asset, abi: erc20Abi, functionName: 'decimals' }) as Promise<number>,
+                publicClient.readContract({ address: pos.asset, abi: erc20Abi, functionName: 'symbol' }).catch(() => 'TOKEN') as Promise<string>,
+              ]);
+              decimals = Number(dec);
+              symbol = sym;
+            } catch {
+              decimals = 18;
+              symbol = 'TOKEN';
             }
           }
-        } catch {}
+
+          userPositions.push({
+            id: pos.id,
+            asset: pos.asset,
+            amount: pos.amount,
+            pausedByAgent: pos.pausedByAgent,
+            symbol,
+            decimals,
+          });
+
+          // Fetch claims for this position
+          if (contracts.emergencyVault) {
+            try {
+              const count = (await publicClient.readContract({
+                address: contracts.emergencyVault as Address,
+                abi: emergencyVaultAbi,
+                functionName: 'claimCount',
+                args: [pos.id],
+              })) as bigint;
+
+              if (count > 0n) {
+                const claimIndices = Array.from({ length: Number(count) }, (_, i) => BigInt(i));
+                await Promise.all(
+                  claimIndices.map(async (ci) => {
+                    const claim = (await publicClient.readContract({
+                      address: contracts.emergencyVault as Address,
+                      abi: emergencyVaultAbi,
+                      functionName: 'claimsByPosition',
+                      args: [pos.id, ci],
+                    })) as readonly [Address, Address, bigint, bigint, boolean];
+
+                    const [claimOwner, claimAsset, claimAmount, claimableAt, claimed] = claim;
+                    if (claimOwner.toLowerCase() === owner.toLowerCase()) {
+                      const isReady = Math.floor(Date.now() / 1000) >= Number(claimableAt);
+                      userClaims.push({
+                        positionId: pos.id,
+                        positionNumber: idx + 1,
+                        claimIndex: ci,
+                        asset: claimAsset,
+                        symbol,
+                        decimals,
+                        amount: claimAmount,
+                        formattedAmount: (Number(claimAmount) / 10 ** decimals).toFixed(2),
+                        claimableAt: Number(claimableAt),
+                        claimed,
+                        isReady,
+                      });
+                    }
+                  })
+                );
+              }
+            } catch {}
+          }
+        })
+      );
+
+      // Sort by ID ascending for consistent display
+      userPositions.sort((a, b) => (a.id < b.id ? -1 : 1));
+      setPositions(userPositions);
+      setClaims(userClaims);
+
+      if (userPositions.length > 0) {
+        setSelectedId(userPositions[0]!.id.toString());
+        setPolicyText(`If ${userPositions[0]!.symbol} drops more than 8%, move 75% to USDC cautiously.`);
       }
-    }
-
-    setPositions(found);
-    setClaims(userClaims);
-
-    if (found.length > 0) {
-      setSelectedId(found[0]!.id.toString());
-      setPolicyText(`If ${found[0]!.symbol} drops more than 8%, move 75% to USDC cautiously.`);
+    } catch (err) {
+      console.error('Fast position scan error:', err);
     }
   }, [ready]);
 
