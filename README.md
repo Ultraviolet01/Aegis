@@ -1,9 +1,9 @@
 # Aegis — Non-Custodial AI Risk Guardian
 
-> Autonomous risk protection for tokenized real-world assets (RWA) and DeFi positions on **X Layer Mainnet (Chain ID 196)** before losses compound.
+> Autonomous risk protection for tokenized real-world assets (RWA) and DeFi positions on **X Layer Testnet (Chain ID 1952)** — open for testing before mainnet launch.
 
-[![Live Web App](https://img.shields.io/badge/Production-aegis--rwa.vercel.app-000000?style=for-the-badge&logo=vercel)](https://aegis-rwa.vercel.app)
-[![Network](https://img.shields.io/badge/Network-X_Layer_Mainnet_(196)-black?style=for-the-badge&logo=ethereum)](https://www.oklink.com/x-layer)
+[![Live Web App](https://img.shields.io/badge/Try_It-aegis--rwa.vercel.app-000000?style=for-the-badge&logo=vercel)](https://aegis-rwa.vercel.app)
+[![Network](https://img.shields.io/badge/Network-X_Layer_Testnet_(1952)-6c6c6c?style=for-the-badge&logo=ethereum)](https://www.oklink.com/x-layer-testnet)
 [![Solidity](https://img.shields.io/badge/Solidity-0.8.33-363636?style=for-the-badge&logo=solidity)](https://soliditylang.org/)
 [![Foundry](https://img.shields.io/badge/Built_With-Foundry-orange?style=for-the-badge)](https://getfoundry.sh/)
 [![Next.js](https://img.shields.io/badge/Frontend-Next.js_15-black?style=for-the-badge&logo=next.js)](https://nextjs.org/)
@@ -35,11 +35,11 @@ graph TD
         OKX_API["OKX DEX Aggregator API"]
     end
 
-    subgraph "X Layer Mainnet Smart Contracts (Chain 196)"
-        Vault["AegisVault.sol (0x8066...C675)"]
-        Registry["PolicyRegistry.sol (0xf5c1...869a)"]
-        Oracle["RiskOracle.sol (0x2a01...1DA6)"]
-        EVault["EmergencyVault.sol (0x55E9...5De2)"]
+    subgraph "X Layer Testnet Smart Contracts (Chain 1952)"
+        Vault["AegisVault.sol (0xc96d...d8DB)"]
+        Registry["PolicyRegistry.sol (0x9034...96Fd2)"]
+        Oracle["RiskOracle.sol (0xEB05...4074)"]
+        EVault["EmergencyVault.sol (0xA33e...Fe61)"]
     end
 
     User -->|"1. Natural language policy input"| Dashboard
@@ -80,31 +80,47 @@ The core product design strictly separates **autonomous guardian protection** fr
 
 ---
 
-## ⛓️ Mainnet Smart Contract Deployments (X Layer, Chain 196)
+## ⛓️ Testnet Smart Contract Deployments (X Layer Testnet, Chain 1952)
 
 All core smart contracts are deployed, active, and **100% source-verified on OKLink Explorer**:
 
-| Contract | Mainnet Contract Address | Status | Block Explorer Link |
+| Contract | Testnet Contract Address | Status | Block Explorer Link |
 |---|---|---|---|
-| **AegisVault** | `0x8066b72f9E87Ca2CFD29e41D6DEd92f6bD1aC675` | Verified ✓ | [OKLink AegisVault](https://www.oklink.com/x-layer/address/0x8066b72f9E87Ca2CFD29e41D6DEd92f6bD1aC675) |
-| **EmergencyVault** | `0x55E943aeC4FB74Dd5c97a85BacddBDa4B98B5De2` | Verified ✓ | [OKLink EmergencyVault](https://www.oklink.com/x-layer/address/0x55E943aeC4FB74Dd5c97a85BacddBDa4B98B5De2) |
-| **PolicyRegistry** | `0xf5c1c62bEEc5CDB4D3b596649C78f513BA5C869a` | Verified ✓ | [OKLink PolicyRegistry](https://www.oklink.com/x-layer/address/0xf5c1c62bEEc5CDB4D3b596649C78f513BA5C869a) |
-| **RiskOracle** | `0x2a017C7eb8030eA7150a62Abb313cb4E358d1DA6` | Verified ✓ | [OKLink RiskOracle](https://www.oklink.com/x-layer/address/0x2a017C7eb8030eA7150a62Abb313cb4E358d1DA6) |
+| **AegisVault** | `0xc96d34534270B3ff41b5b4e30731c980FdfEd8DB` | Verified ✓ | [OKLink AegisVault](https://www.oklink.com/x-layer-testnet/address/0xc96d34534270B3ff41b5b4e30731c980FdfEd8DB) |
+| **EmergencyVault** | `0xA33e3050b185B9289C1732d71C53B0c36A25Fe61` | Verified ✓ | [OKLink EmergencyVault](https://www.oklink.com/x-layer-testnet/address/0xA33e3050b185B9289C1732d71C53B0c36A25Fe61) |
+| **PolicyRegistry** | `0x90346e8ebB6fb000c97BbcdE93D7C5C192396Fd2` | Verified ✓ | [OKLink PolicyRegistry](https://www.oklink.com/x-layer-testnet/address/0x90346e8ebB6fb000c97BbcdE93D7C5C192396Fd2) |
+| **RiskOracle** | `0xEB0538B1c199eC063B7E6e785572ed4402D94074` | Verified ✓ | [OKLink RiskOracle](https://www.oklink.com/x-layer-testnet/address/0xEB0538B1c199eC063B7E6e785572ed4402D94074) |
 
-### Supported Real Assets on Mainnet
-- **GLDX** (Tokenized Gold): `0x2380f2673c640fb67e2d6b55b44c62f0e0e69da9`
-- **SPYX** (Tokenized S&P 500): `0x90a2a4c76b5d8c0bc892a69ea28aa775a8f2dd48`
-- **USDC** (USD Stablecoin): `0x74b7F16337b8972027F6196A17a631aC6dE26d22`
+### Testnet Mock Assets (free to mint — no real funds needed)
+- **tGLDX** (Mock Tokenized Gold): `0xa7218E99738F3d83f6c2B85b2b5f13f6E709a3DF`
+- **tSPYX** (Mock Tokenized S&P 500): `0x28AD1826640A3B840bD13e0C0900dE8C75C6491C`
+- **tUSDC** (Mock USD Stablecoin): `0x7d2a9f61f641538787ba6052A8C496C749AfBfd1`
+
+
+### 🚰 Getting Started on Testnet (no real funds needed)
+
+To test Aegis you need two things — both are free:
+
+**1. Testnet OKB (gas):**
+> X Layer Testnet uses **OKB** as its gas token. Get **0.2 OKB/day** from the official faucet:
+> **[https://web3.okx.com/xlayer/faucet](https://web3.okx.com/xlayer/faucet)**
+> Make sure your wallet is connected to **X Layer Testnet (Chain ID 1952)** before requesting — the faucet only drips to addresses on the testnet chain.
+
+**2. Testnet mock tokens (tGLDX / tSPYX / tUSDC):**
+> The dashboard has a built-in **🚰 Faucet** tab. Connect your wallet, click **Mint**, and free tokens land directly in your wallet. No approval or real funds required — the mock contracts are open to anyone.
+
+> ⚠️ **Mainnet deployment exists** (Chain 196) but is not yet open for public use. The live app runs on testnet only.
 
 ---
 
 ## 🗺️ Product Roadmap
 
-### 📍 Phase 1: X Layer Mainnet & Core Guardian (Q3 2026 — Live on Mainnet)
-- [x] Deploy & source-verify smart contracts on X Layer Mainnet (Chain 196).
+### 📍 Phase 1: X Layer Testnet & Core Guardian (Q3 2026 — Live on Testnet ✅)
+- [x] Deploy & source-verify smart contracts on X Layer Testnet (Chain 1952).
 - [x] Launch natural language LLM policy parser (Anthropic Claude integration).
 - [x] Deploy off-chain AI guardian monitoring engine with OKX DEX quote verification.
-- [x] Launch production web dashboard deployed to Vercel ([aegis-rwa.vercel.app](https://aegis-rwa.vercel.app)).
+- [x] Launch web dashboard deployed to Vercel ([aegis-rwa.vercel.app](https://aegis-rwa.vercel.app)).
+- [ ] Open public mainnet deployment on X Layer Mainnet (Chain 196).
 
 ### 📍 Phase 2: Multi-Asset Expansion & Advanced Risk Engine (Q4 2026)
 - [ ] Support additional tokenized Real-World Assets (Tokenized US Treasuries, Commodities, Equities).
@@ -143,7 +159,7 @@ All core smart contracts are deployed, active, and **100% source-verified on OKL
 ├── frontend/             # Next.js 15 Web Dashboard
 │   ├── app/                 # Next.js App Router pages & API routes (/api/swap, /api/parse-policy)
 │   ├── components/          # React components (Policy composer, Margin chart, Risk radar)
-│   └── lib/                 # Chain config (xLayerMainnet 196), Viem clients, wallet helpers
+│   └── lib/                 # Chain config (xLayerTestnet 1952), Viem clients, wallet helpers
 ├── scripts/              # Verification, automated testing, & maintenance scripts
 └── verify/               # OKLink standard JSON input verification metadata
 ```

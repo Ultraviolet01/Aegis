@@ -13,10 +13,11 @@ import {
   explorerAddressUrl,
   explorerTxUrl,
   MAINNET_TOKENS,
+  TESTNET_TOKENS,
   TOKENS,
   shortAddress,
 } from '@/lib/chain';
-import { aegisVaultAbi, erc20Abi, policyRegistryAbi } from '@/lib/abis';
+import { aegisVaultAbi, emergencyVaultAbi, erc20Abi, policyRegistryAbi } from '@/lib/abis';
 import {
   connectWallet,
   describeError,
@@ -37,6 +38,20 @@ interface Position {
   pausedByAgent: boolean;
   symbol: string;
   decimals: number;
+}
+
+export interface EmergencyClaimItem {
+  positionId: bigint;
+  positionNumber: number;
+  claimIndex: bigint;
+  asset: Address;
+  symbol: string;
+  decimals: number;
+  amount: bigint;
+  formattedAmount: string;
+  claimableAt: number;
+  claimed: boolean;
+  isReady: boolean;
 }
 
 interface OnChainPolicy {
@@ -75,6 +90,7 @@ function AppScreen() {
   const [chainId, setChainId] = useState<number>();
   const [busy, setBusy] = useState<string>();
   
+  const [claims, setClaims] = useState<EmergencyClaimItem[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
   const [selectedId, setSelectedId] = useState<string>('');
   const [onChainPolicy, setOnChainPolicy] = useState<OnChainPolicy>();
@@ -118,6 +134,8 @@ function AppScreen() {
   const activePositions = account ? positions : demoPositions;
   const activeSelectedId = selectedId || (activePositions[0] ? activePositions[0].id.toString() : '');
   const activeSelected = activePositions.find((p) => p.id.toString() === activeSelectedId);
+  const activeIndex = activePositions.findIndex((p) => p.id.toString() === activeSelectedId);
+  const activePositionNumber = activeIndex !== -1 ? activeIndex + 1 : 1;
   const activePolicy = account ? onChainPolicy : (demoPolicy.active ? demoPolicy : undefined);
   const activeHistory = account ? history : demoHistory;
   
@@ -132,6 +150,7 @@ function AppScreen() {
     setSelectedId('');
     setOnChainPolicy(undefined);
     setHistory([]);
+    setClaims([]);
 
     // Scalable per-wallet position lookup via getLogs on PositionOpened event (filtered by owner topic)
     let targetIds: bigint[] = [];
@@ -174,6 +193,8 @@ function AppScreen() {
     }
 
     const found: Position[] = [];
+    const userClaims: EmergencyClaimItem[] = [];
+
     for (const id of targetIds) {
       const [posOwner, asset, amount, pausedByAgent, exists] = (await publicClient.readContract({
         address: contracts.vault as Address,
@@ -182,21 +203,94 @@ function AppScreen() {
         args: [id],
       })) as readonly [Address, Address, bigint, boolean, boolean];
 
-      if (!exists || amount === 0n) continue;
+      if (!exists) continue;
       if (posOwner.toLowerCase() !== owner.toLowerCase()) continue;
 
       const [decimals, symbol] = await Promise.all([
         publicClient.readContract({ address: asset, abi: erc20Abi, functionName: 'decimals' }) as Promise<number>,
         publicClient.readContract({ address: asset, abi: erc20Abi, functionName: 'symbol' }).catch(() => 'TOKEN') as Promise<string>,
       ]);
-      found.push({ id, asset, amount, pausedByAgent, symbol, decimals: Number(decimals) });
+
+      if (amount > 0n) {
+        found.push({ id, asset, amount, pausedByAgent, symbol, decimals: Number(decimals) });
+      }
+
+      // Query emergency claims on this position
+      if (contracts.emergencyVault) {
+        try {
+          const count = (await publicClient.readContract({
+            address: contracts.emergencyVault as Address,
+            abi: emergencyVaultAbi,
+            functionName: 'claimCount',
+            args: [id],
+          })) as bigint;
+
+          for (let i = 0n; i < count; i++) {
+            const claim = (await publicClient.readContract({
+              address: contracts.emergencyVault as Address,
+              abi: emergencyVaultAbi,
+              functionName: 'claimsByPosition',
+              args: [id, i],
+            })) as readonly [Address, Address, bigint, bigint, boolean];
+
+            const [claimOwner, claimAsset, claimAmount, claimableAt, claimed] = claim;
+            if (claimOwner.toLowerCase() === owner.toLowerCase()) {
+              const isReady = Math.floor(Date.now() / 1000) >= Number(claimableAt);
+              userClaims.push({
+                positionId: id,
+                positionNumber: found.length || 1,
+                claimIndex: i,
+                asset: claimAsset,
+                symbol,
+                decimals: Number(decimals),
+                amount: claimAmount,
+                formattedAmount: (Number(claimAmount) / 10 ** Number(decimals)).toFixed(2),
+                claimableAt: Number(claimableAt),
+                claimed,
+                isReady,
+              });
+            }
+          }
+        } catch {}
+      }
     }
+
     setPositions(found);
+    setClaims(userClaims);
+
     if (found.length > 0) {
       setSelectedId(found[0]!.id.toString());
       setPolicyText(`If ${found[0]!.symbol} drops more than 8%, move 75% to USDC cautiously.`);
     }
   }, [ready]);
+
+  const claimEmergencyFunds = async (claimItem: EmergencyClaimItem) => {
+    if (!account || !contracts.emergencyVault) return;
+    try {
+      await ensureCorrectChain();
+    } catch {}
+
+    const key = `claim-${claimItem.positionId}-${claimItem.claimIndex}`;
+    setBusy(key);
+    try {
+      const wallet = await getWalletClient(account);
+      const hash = await wallet.writeContract({
+        account,
+        address: contracts.emergencyVault as Address,
+        abi: emergencyVaultAbi,
+        functionName: 'claim',
+        args: [claimItem.positionId, claimItem.claimIndex],
+      });
+      toast({ kind: 'success', title: 'Claim submitted', description: 'Transaction broadcasted on X Layer.' });
+      await publicClient.waitForTransactionReceipt({ hash });
+      toast({ kind: 'success', title: 'Funds claimed!', description: `${claimItem.formattedAmount} ${claimItem.symbol} received in your wallet.` });
+      await loadPositions(account);
+    } catch (err: any) {
+      toast({ kind: 'error', title: 'Claim failed', description: describeError(err) });
+    } finally {
+      setBusy(undefined);
+    }
+  };
 
   useEffect(() => {
     if (!activeSelected || !ready) {
@@ -278,10 +372,21 @@ function AppScreen() {
       return;
     }
 
-    const posId = activeSelected ? activeSelected.id : 1n;
+    if (!activeSelected) {
+      toast({
+        kind: 'error',
+        title: 'No Deposited Position',
+        description: 'You must deposit an asset into Aegis Vault first before setting an on-chain risk policy.',
+      });
+      setShowDepositModal(true);
+      return;
+    }
+
+    const posId = activeSelected.id;
     setBusy('sign');
     try {
-      toast({ kind: 'info', title: 'Preparing signature', description: 'Opening wallet for transaction approval...' });
+      await ensureCorrectChain();
+      toast({ kind: 'info', title: 'Preparing signature', description: `Opening wallet to sign policy for Position #${posId.toString()}...` });
       const wallet = await getWalletClient(account);
       const modeIdx = POLICY_MODES.indexOf(parsedPolicy.mode);
       const args = [
@@ -317,13 +422,17 @@ function AppScreen() {
       await publicClient.waitForTransactionReceipt({ hash });
       toast({ kind: 'success', title: 'Policy active', description: 'Agent is now enforcing your boundaries.' });
       
-      const policy = (await publicClient.readContract({
-        address: contracts.policyRegistry as Address,
-        abi: policyRegistryAbi,
-        functionName: 'getPolicy',
-        args: [posId],
-      }).catch(() => undefined)) as OnChainPolicy | undefined;
+      const [policy, decisions] = await Promise.all([
+        publicClient.readContract({
+          address: contracts.policyRegistry as Address,
+          abi: policyRegistryAbi,
+          functionName: 'getPolicy',
+          args: [posId],
+        }).catch(() => undefined) as Promise<OnChainPolicy | undefined>,
+        loadDecisionHistory(posId).catch(() => []),
+      ]);
       setOnChainPolicy(policy);
+      setHistory(decisions);
       setActiveTab('Overview');
     } catch (err) {
       toast({ kind: 'error', title: 'Failed to sign policy', description: describeError(err) });
@@ -361,6 +470,7 @@ function AppScreen() {
 
     setBusy('deposit');
     try {
+      await ensureCorrectChain();
       const wallet = await getWalletClient(account);
       const tokenAddress = targetAsset as Address;
 
@@ -438,10 +548,66 @@ function AppScreen() {
     }
   };
 
+  // ── Testnet faucet ────────────────────────────────────────────────────────
+  const [mintingToken, setMintingToken] = useState<string>();
+  const [mintSuccess, setMintSuccess] = useState<{ symbol: string; amount: string; txHash: string } | null>(null);
+
+  const mintTestTokens = async (symbol: keyof typeof TESTNET_TOKENS) => {
+    if (!account) {
+      toast({ kind: 'error', title: 'Wallet not connected', description: 'Connect your wallet first.' });
+      return;
+    }
+    const token = TESTNET_TOKENS[symbol];
+    setMintingToken(symbol);
+    try {
+      await ensureCorrectChain();
+      const wallet = await getWalletClient(account);
+      const amount = parseUnits(token.faucetAmount, token.decimals);
+      toast({ kind: 'info', title: `Minting ${token.faucetAmount} ${token.symbol}...`, description: 'Approve the transaction in your wallet.' });
+      let hash: `0x${string}`;
+      try {
+        const { request } = await publicClient.simulateContract({
+          account,
+          address: token.address as `0x${string}`,
+          abi: erc20Abi,
+          functionName: 'mint',
+          args: [account, amount],
+        });
+        hash = await wallet.writeContract(request);
+      } catch (_simErr) {
+        hash = await wallet.writeContract({
+          account,
+          address: token.address as `0x${string}`,
+          abi: erc20Abi,
+          functionName: 'mint',
+          args: [account, amount],
+        });
+      }
+      toast({ kind: 'info', title: 'Transaction submitted', description: 'Waiting for on-chain confirmation...' });
+      try {
+        await publicClient.waitForTransactionReceipt({ hash, timeout: 45_000 });
+      } catch (receiptErr) {
+        console.warn('Receipt poll warning:', receiptErr);
+      }
+      setMintSuccess({ symbol: token.symbol, amount: token.faucetAmount, txHash: hash });
+      toast({
+        kind: 'success',
+        title: `${token.faucetAmount} ${token.symbol} successfully minted`,
+        description: 'Tokens are now in your wallet. You can now deposit them into Aegis Vault.',
+      });
+    } catch (err) {
+      toast({ kind: 'error', title: 'Mint failed', description: describeError(err) });
+    } finally {
+      setMintingToken(undefined);
+    }
+  };
+  // ──────────────────────────────────────────────────────────────────────────
+
   const withdrawPosition = async (positionId: bigint) => {
     if (!account) return;
     setBusy(`withdraw-${positionId.toString()}`);
     try {
+      await ensureCorrectChain();
       const wallet = await getWalletClient(account);
       const pos = positions.find((p) => p.id === positionId);
       const amountToWithdraw = pos ? pos.amount : 0n;
@@ -486,8 +652,12 @@ function AppScreen() {
                 Aegis
               </Link>
               
-              {['Overview', 'Positions', 'Policies', 'Activity', 'Contracts'].map((tab) => {
+              {[...['Overview', 'Positions', 'Emergency Claims', 'Policies', 'Activity', 'Contracts'], ...(activeNetwork === 'testnet' ? ['Faucet'] : [])].map((tab) => {
                 const isActive = activeTab === tab;
+                const isFaucet = tab === 'Faucet';
+                const isEmergency = tab === 'Emergency Claims';
+                const unclaimedCount = claims.filter(c => !c.claimed).length;
+
                 return (
                   <motion.div 
                     key={tab}
@@ -496,6 +666,7 @@ function AppScreen() {
                     whileHover={{ x: 3 }}
                     whileTap={{ scale: 0.97 }}
                     transition={{ duration: 0.18 }}
+                    style={isFaucet ? { marginTop: '8px', borderTop: '1px solid rgba(79,224,168,0.12)', paddingTop: '8px' } : {}}
                   >
                     {isActive && (
                       <motion.div
@@ -504,7 +675,22 @@ function AppScreen() {
                         transition={{ type: 'spring', stiffness: 420, damping: 32, mass: 0.8 }}
                       />
                     )}
-                    <span style={{ position: 'relative', zIndex: 2 }}>{tab}</span>
+                    <span style={{ position: 'relative', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                      <span>{tab}</span>
+                      {isEmergency && unclaimedCount > 0 && (
+                        <span style={{
+                          background: '#ff5442',
+                          color: '#fff',
+                          fontSize: '10px',
+                          fontWeight: 700,
+                          borderRadius: '999px',
+                          padding: '1px 6px',
+                          fontFamily: 'var(--mono)'
+                        }}>
+                          {unclaimedCount}
+                        </span>
+                      )}
+                    </span>
                   </motion.div>
                 );
               })}
@@ -516,15 +702,19 @@ function AppScreen() {
             
             <div className="mainapp">
               <div className="mobile-nav-bar">
-                {['Overview', 'Positions', 'Policies', 'Activity', 'Contracts'].map((tab) => (
-                  <button
-                    key={tab}
-                    className={`mobile-nav-tab ${activeTab === tab ? 'active' : ''}`}
-                    onClick={() => setActiveTab(tab)}
-                  >
-                    {tab}
-                  </button>
-                ))}
+                {[...['Overview', 'Positions', 'Emergency Claims', 'Policies', 'Activity', 'Contracts'], ...(activeNetwork === 'testnet' ? ['Faucet'] : [])].map((tab) => {
+                  const isEmergency = tab === 'Emergency Claims';
+                  const unclaimedCount = claims.filter(c => !c.claimed).length;
+                  return (
+                    <button
+                      key={tab}
+                      className={`mobile-nav-tab ${activeTab === tab ? 'active' : ''}`}
+                      onClick={() => setActiveTab(tab)}
+                    >
+                      {tab}{isEmergency && unclaimedCount > 0 ? ` (${unclaimedCount})` : ''}
+                    </button>
+                  );
+                })}
               </div>
               <Reveal delay={0.2} className="apptop">
                 <div>
@@ -558,6 +748,72 @@ function AppScreen() {
                 >
                   {activeTab === 'Overview' && (
                     <>
+                      {claims.filter(c => !c.claimed).length > 0 && (
+                        <div style={{
+                          background: 'linear-gradient(135deg, rgba(231, 76, 60, 0.14) 0%, rgba(230, 126, 34, 0.08) 100%)',
+                          border: '1px solid rgba(231, 76, 60, 0.45)',
+                          borderRadius: '16px',
+                          padding: '18px 22px',
+                          marginBottom: '20px',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          flexWrap: 'wrap',
+                          gap: '16px'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                            <div style={{
+                              width: '42px',
+                              height: '42px',
+                              borderRadius: '10px',
+                              background: 'rgba(231, 76, 60, 0.2)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '20px'
+                            }}>
+                              🚨
+                            </div>
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <h4 style={{ margin: 0, color: '#ff8575', fontSize: '15px', fontWeight: 600 }}>
+                                  Emergency Protection Active
+                                </h4>
+                                <span style={{
+                                  background: 'rgba(231, 76, 60, 0.25)',
+                                  color: '#ff9d91',
+                                  fontSize: '10px',
+                                  fontFamily: 'var(--mono)',
+                                  fontWeight: 700,
+                                  padding: '2px 8px',
+                                  borderRadius: '4px'
+                                }}>
+                                  {claims.filter(c => !c.claimed).length} CLAIM IN EMERGENCY VAULT
+                                </span>
+                              </div>
+                              <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#b2c8bf' }}>
+                                Guardian executed risk policy exit: <b>{claims.filter(c => !c.claimed).map(c => `${c.formattedAmount} ${c.symbol}`).join(', ')}</b> secured in EmergencyVault.
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => setActiveTab('Emergency Claims')}
+                            className="btn-primary"
+                            style={{
+                              background: '#ff5442',
+                              borderColor: '#ff5442',
+                              color: '#fff',
+                              padding: '9px 18px',
+                              fontSize: '13px',
+                              borderRadius: '8px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            View & Claim in Emergency Vault ↗
+                          </button>
+                        </div>
+                      )}
+
                       <div className="appcards">
                         <div className="appcard light">
                           <h4>Protected balance</h4>
@@ -677,7 +933,7 @@ function AppScreen() {
                                 font: '600 20px var(--display)',
                                 color: '#10231e'
                               }}>
-                                No Policy Set for Position #{activeSelected.id.toString()} ({activeSelected.symbol})
+                                No Policy Set for Position #{activePositionNumber} ({activeSelected.symbol})
                               </h3>
                               <p style={{
                                 font: '400 13px var(--sans)',
@@ -712,7 +968,7 @@ function AppScreen() {
                                 color: '#10231e',
                                 letterSpacing: '-0.02em'
                               }}>
-                                Active policy · {symbol}
+                                Active policy · Position #{activePositionNumber} ({symbol})
                               </h3>
 
                               <div style={{
@@ -858,7 +1114,7 @@ function AppScreen() {
                         </motion.button>
                       </div>
 
-                      {activePositions.length > 0 ? activePositions.map(pos => (
+                      {activePositions.length > 0 ? activePositions.map((pos, idx) => (
                         <div 
                           key={pos.id.toString()} 
                           className="appcard" 
@@ -870,7 +1126,7 @@ function AppScreen() {
                         >
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                             <div>
-                              <h4>Position #{pos.id.toString()} · {pos.symbol}</h4>
+                              <h4>Position #{idx + 1} · {pos.symbol}</h4>
                               <div className="balance" style={{ fontSize: '24px', marginTop: '4px' }}>{formatUnits(pos.amount, pos.decimals)}</div>
                               <div className="sub" style={{ marginTop: '6px', color: pos.pausedByAgent ? '#e74c3c' : 'var(--mint)' }}>
                                 {pos.pausedByAgent ? 'PAUSED BY GUARDIAN' : 'ACTIVE · PROTECTED'}
@@ -924,6 +1180,42 @@ function AppScreen() {
                               </motion.button>
                             </div>
                           </div>
+
+                          {/* Position Emergency Claim Notice if any */}
+                          {claims.filter(c => c.positionId === pos.id && !c.claimed).length > 0 && (
+                            <div style={{
+                              marginTop: '14px',
+                              paddingTop: '12px',
+                              borderTop: '1px solid rgba(231, 76, 60, 0.2)',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              flexWrap: 'wrap',
+                              gap: '8px'
+                            }}>
+                              <span style={{ fontSize: '12px', color: '#ff8e80' }}>
+                                🚨 {claims.filter(c => c.positionId === pos.id && !c.claimed).map(c => `${c.formattedAmount} ${c.symbol}`).join(', ')} protected in EmergencyVault
+                              </span>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveTab('Emergency Claims');
+                                }}
+                                style={{
+                                  background: 'rgba(231, 76, 60, 0.2)',
+                                  border: '1px solid rgba(231, 76, 60, 0.4)',
+                                  color: '#ff8e80',
+                                  padding: '4px 10px',
+                                  borderRadius: '6px',
+                                  fontSize: '11px',
+                                  cursor: 'pointer',
+                                  fontFamily: 'var(--mono)'
+                                }}
+                              >
+                                Claim in Vault ↗
+                              </button>
+                            </div>
+                          )}
                         </div>
                       )) : (
                         <div className="appcard" style={{ textAlign: 'center', padding: '30px 20px' }}>
@@ -941,6 +1233,187 @@ function AppScreen() {
                     </div>
                   )}
 
+                  {activeTab === 'Emergency Claims' && (
+                    <div className="appcard-full">
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
+                        <div>
+                          <h4 style={{ margin: 0, fontSize: '20px', color: 'var(--white)' }}>
+                            Emergency Vault Claims
+                          </h4>
+                          <div style={{ fontSize: '13px', color: '#7a9b90', marginTop: '6px' }}>
+                            Non-custodial timelocked security vault on X Layer Testnet
+                          </div>
+                        </div>
+                        <div style={{
+                          background: 'rgba(79, 224, 168, 0.08)',
+                          border: '1px solid rgba(79, 224, 168, 0.25)',
+                          borderRadius: '8px',
+                          padding: '8px 14px',
+                          fontSize: '12px',
+                          color: 'var(--mint)',
+                          fontFamily: 'var(--mono)'
+                        }}>
+                          Contract: {shortAddress(contracts.emergencyVault)}
+                        </div>
+                      </div>
+
+                      <div style={{
+                        background: 'rgba(16, 35, 30, 0.4)',
+                        border: '1px solid rgba(79, 224, 168, 0.15)',
+                        borderRadius: '12px',
+                        padding: '16px 20px',
+                        marginBottom: '24px',
+                        fontSize: '13px',
+                        color: '#95b3a6',
+                        lineHeight: '1.6'
+                      }}>
+                        <b style={{ color: 'var(--white)' }}>Non-Custodial Guarantee:</b> When an automated risk policy triggers an emergency exit, the Guardian agent routes your assets into <code style={{ color: 'var(--mint)' }}>EmergencyVault.sol</code>. Neither the agent nor any admin can withdraw or touch these funds — <b>only your connected wallet</b> ({account ? shortAddress(account) : 'owner'}) can execute the final claim.
+                      </div>
+
+                      {claims.length > 0 ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                          {claims.map((claim) => {
+                            const isBusyClaiming = busy === `claim-${claim.positionId}-${claim.claimIndex}`;
+                            return (
+                              <div
+                                key={`${claim.positionId}-${claim.claimIndex}`}
+                                style={{
+                                  background: claim.claimed ? 'rgba(255,255,255,0.02)' : 'rgba(231, 76, 60, 0.06)',
+                                  border: claim.claimed ? '1px solid rgba(255,255,255,0.08)' : claim.isReady ? '1px solid rgba(79, 224, 168, 0.5)' : '1px solid rgba(231, 76, 60, 0.3)',
+                                  borderRadius: '14px',
+                                  padding: '20px 24px',
+                                  display: 'flex',
+                                  justifyContent: 'space-between',
+                                  alignItems: 'center',
+                                  flexWrap: 'wrap',
+                                  gap: '16px'
+                                }}
+                              >
+                                <div>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <span style={{ fontSize: '20px', fontWeight: 700, color: 'var(--white)', fontFamily: 'var(--mono)' }}>
+                                      {claim.formattedAmount} {claim.symbol}
+                                    </span>
+                                    <span
+                                      style={{
+                                        padding: '3px 8px',
+                                        borderRadius: '4px',
+                                        fontSize: '10px',
+                                        fontFamily: 'var(--mono)',
+                                        fontWeight: 700,
+                                        background: claim.claimed ? 'rgba(255,255,255,0.1)' : claim.isReady ? 'rgba(79, 224, 168, 0.2)' : 'rgba(231, 76, 60, 0.2)',
+                                        color: claim.claimed ? '#a0b3ab' : claim.isReady ? 'var(--mint)' : '#ff8e80'
+                                      }}
+                                    >
+                                      {claim.claimed ? 'CLAIMED ✅' : claim.isReady ? 'READY TO CLAIM 🟢' : 'TIMELOCKED ⏳'}
+                                    </span>
+                                  </div>
+
+                                  <div style={{ fontSize: '12px', color: '#7a9b90', marginTop: '6px' }}>
+                                    Routed from Position #{claim.positionNumber} (ID: {claim.positionId.toString()})
+                                  </div>
+
+                                  <div style={{ fontSize: '11px', color: '#5e7a70', marginTop: '4px', fontFamily: 'var(--mono)' }}>
+                                    {claim.claimed ? (
+                                      'Claim confirmed on-chain'
+                                    ) : claim.isReady ? (
+                                      'Security timelock expired — available for immediate withdrawal'
+                                    ) : (
+                                      `Unlocks: ${new Date(claim.claimableAt * 1000).toLocaleString()} (${Math.max(0, Math.ceil((claim.claimableAt - Math.floor(Date.now() / 1000)) / 3600))}h remaining)`
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div>
+                                  {claim.claimed ? (
+                                    <button
+                                      disabled
+                                      style={{
+                                        background: 'rgba(255,255,255,0.05)',
+                                        color: '#6e857c',
+                                        border: '1px solid rgba(255,255,255,0.1)',
+                                        padding: '10px 18px',
+                                        borderRadius: '8px',
+                                        fontSize: '13px',
+                                        cursor: 'not-allowed'
+                                      }}
+                                    >
+                                      Claimed ✓
+                                    </button>
+                                  ) : (
+                                    <motion.button
+                                      onClick={() => claimEmergencyFunds(claim)}
+                                      disabled={isBusyClaiming || !claim.isReady}
+                                      className="btn-primary"
+                                      whileHover={claim.isReady ? { scale: 1.03 } : {}}
+                                      whileTap={claim.isReady ? { scale: 0.97 } : {}}
+                                      style={
+                                        !claim.isReady
+                                          ? {
+                                              background: 'rgba(231, 76, 60, 0.15)',
+                                              borderColor: 'rgba(231, 76, 60, 0.3)',
+                                              color: '#ff8e80',
+                                              cursor: 'not-allowed',
+                                              opacity: 0.8,
+                                              padding: '10px 18px',
+                                              fontSize: '13px'
+                                            }
+                                          : {
+                                              padding: '10px 20px',
+                                              fontSize: '13px'
+                                            }
+                                      }
+                                    >
+                                      {isBusyClaiming ? (
+                                        <span className="spinner" />
+                                      ) : claim.isReady ? (
+                                        `Claim ${claim.formattedAmount} ${claim.symbol}`
+                                      ) : (
+                                        `Locked (24h Window)`
+                                      )}
+                                    </motion.button>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div style={{ textAlign: 'center', padding: '40px 20px', color: '#7a9b90' }}>
+                          <div style={{ fontSize: '32px', marginBottom: '12px' }}>🛡️</div>
+                          <div style={{ fontSize: '15px', color: 'var(--white)', fontWeight: 600 }}>No Emergency Claims Active</div>
+                          <div style={{ fontSize: '13px', marginTop: '6px', maxWidth: '420px', margin: '6px auto 0 auto' }}>
+                            When a risk condition breaches your signed policy, the Guardian agent routes protected portions directly here.
+                          </div>
+                        </div>
+                      )}
+
+                      <div style={{ marginTop: '24px', paddingTop: '16px', borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <a
+                          href={explorerAddressUrl(contracts.emergencyVault)}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{ color: 'var(--mint)', textDecoration: 'none', fontSize: '12px', fontFamily: 'var(--mono)' }}
+                        >
+                          View EmergencyVault Contract on OKLink Explorer ↗
+                        </a>
+                        <button
+                          onClick={() => account && loadPositions(account)}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: '#7a9b90',
+                            fontSize: '12px',
+                            cursor: 'pointer',
+                            fontFamily: 'var(--mono)'
+                          }}
+                        >
+                          ↻ Refresh Claims
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {activeTab === 'Policies' && (
                     <div className="appcard-full">
                       {activePolicy?.active && (
@@ -955,7 +1428,7 @@ function AppScreen() {
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                               <span className="act-live" />
                               <h5 style={{ margin: 0, font: '600 14px var(--sans)', color: 'var(--white)' }}>
-                                Active Enforced On-Chain Policy {activeSelected ? `(${activeSelected.symbol})` : ''}
+                                Active Enforced On-Chain Policy · Position #{activePositionNumber} {activeSelected ? `(${activeSelected.symbol})` : ''}
                               </h5>
                             </div>
                             <span style={{ font: '500 10px var(--mono)', color: 'var(--mint)', background: 'rgba(79,224,168,0.15)', padding: '3px 8px', borderRadius: '4px' }}>
@@ -995,87 +1468,97 @@ function AppScreen() {
                         </div>
                       )}
 
+                      {/* Position Selector or Deposit Warning */}
+                      {account && positions.length === 0 && (
+                        <div style={{
+                          marginBottom: '20px',
+                          padding: '16px 20px',
+                          borderRadius: '12px',
+                          background: 'rgba(255, 180, 50, 0.08)',
+                          border: '1px solid rgba(255, 180, 50, 0.3)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '16px',
+                          flexWrap: 'wrap'
+                        }}>
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#f39c12', fontWeight: 600, fontSize: '14px', marginBottom: '4px' }}>
+                              ⚠️ No Open Vault Position Found
+                            </div>
+                            <p style={{ margin: 0, fontSize: '13px', color: '#c8a060', lineHeight: '1.5' }}>
+                              A policy is signed on-chain for a specific deposited position. Mint tokens from the Faucet and deposit them into Aegis Vault first.
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => setShowDepositModal(true)}
+                            className="btn-primary"
+                            style={{ padding: '8px 16px', fontSize: '13px', whiteSpace: 'nowrap' }}
+                          >
+                            + Deposit Position First
+                          </button>
+                        </div>
+                      )}
+
+                      {account && positions.length > 0 && (
+                        <div style={{
+                          marginBottom: '20px',
+                          padding: '14px 18px',
+                          borderRadius: '12px',
+                          background: 'rgba(79, 224, 168, 0.08)',
+                          border: '1px solid rgba(79, 224, 168, 0.25)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '12px',
+                          flexWrap: 'wrap'
+                        }}>
+                          <div>
+                            <div style={{ fontSize: '11px', fontFamily: 'var(--mono)', color: 'var(--mint)', textTransform: 'uppercase', marginBottom: '4px' }}>
+                              Target Position to Protect
+                            </div>
+                            <div style={{ fontSize: '13px', color: '#a0b8b0' }}>
+                              Selecting: <b>Position #{activePositionNumber}</b> ({activeSelected ? formatUnits(activeSelected.amount, activeSelected.decimals) : ''} {activeSelected?.symbol})
+                            </div>
+                          </div>
+                          <select
+                            value={activeSelectedId}
+                            onChange={(e) => {
+                              setSelectedId(e.target.value);
+                              const pos = positions.find(p => p.id.toString() === e.target.value);
+                              if (pos) {
+                                setPolicyText(`If ${pos.symbol} drops more than 8%, move 75% to USDC cautiously.`);
+                              }
+                            }}
+                            style={{
+                              background: '#10231e',
+                              border: '1px solid rgba(79, 224, 168, 0.4)',
+                              color: 'var(--mint)',
+                              padding: '8px 14px',
+                              borderRadius: '8px',
+                              fontSize: '13px',
+                              fontFamily: 'var(--mono)',
+                              outline: 'none'
+                            }}
+                          >
+                            {positions.map((p, idx) => (
+                              <option key={p.id.toString()} value={p.id.toString()}>
+                                Position #{idx + 1} · {formatUnits(p.amount, p.decimals)} {p.symbol}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
                         <div>
                           <h4 style={{ margin: 0 }}>
-                            {activePolicy?.active ? 'Update / Re-Sign Policy' : 'Write New Policy'}{policyAssetSymbol ? ` for ${policyAssetSymbol}` : ''}
+                            {activePolicy?.active ? 'Update / Re-Sign Policy' : 'Write New Policy'}{activeSelected ? ` for Position #${activePositionNumber} (${activeSelected.symbol})` : ''}
                           </h4>
                           <span style={{ fontSize: '12px', color: '#7a9b90' }}>
-                            Select RWA asset to apply policy to:
+                            Describe emergency risk thresholds in plain English or select presets:
                           </span>
                         </div>
-                      </div>
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
-                        {!isCustomPolicyAsset ? (
-                          <select
-                            value={policyAsset}
-                            onChange={(e) => {
-                              setPolicyAsset(e.target.value);
-                              const sym = TOKENS[e.target.value as keyof typeof TOKENS]?.symbol ?? e.target.value;
-                              setPolicyText(`If ${sym} drops more than 8%, move 75% to USDC cautiously.`);
-                            }}
-                            style={{
-                              background: '#10231e',
-                              border: '1px solid rgba(79, 224, 168, 0.4)',
-                              color: 'var(--mint)',
-                              padding: '8px 14px',
-                              borderRadius: '8px',
-                              fontSize: '13px',
-                              fontFamily: 'var(--mono)',
-                              outline: 'none',
-                              flex: '1',
-                              minWidth: '180px'
-                            }}
-                          >
-                            <option value="SPYX">{TOKENS.SPYX.symbol} — Tokenized S&P 500</option>
-                            <option value="GLDX">{TOKENS.GLDX.symbol} — Tokenized Gold</option>
-                            <option value="USDC">{TOKENS.USDC.symbol} — USD Stablecoin</option>
-                          </select>
-                        ) : (
-                          <input
-                            type="text"
-                            value={customPolicyAssetAddress}
-                            onChange={(e) => setCustomPolicyAssetAddress(e.target.value)}
-                            placeholder="0x... (ERC20 RWA Token Address)"
-                            style={{
-                              background: '#10231e',
-                              border: '1px solid rgba(79, 224, 168, 0.4)',
-                              color: 'var(--mint)',
-                              padding: '8px 14px',
-                              borderRadius: '8px',
-                              fontSize: '13px',
-                              fontFamily: 'var(--mono)',
-                              outline: 'none',
-                              flex: '1',
-                              minWidth: '180px'
-                            }}
-                          />
-                        )}
-                        <button
-                          onClick={() => {
-                            setIsCustomPolicyAsset(!isCustomPolicyAsset);
-                            if (!isCustomPolicyAsset) {
-                              setPolicyText('If [token] drops more than 8%, move 75% to USDC cautiously.');
-                            } else {
-                              const sym = TOKENS[policyAsset as keyof typeof TOKENS]?.symbol ?? policyAsset;
-                              setPolicyText(`If ${sym} drops more than 8%, move 75% to USDC cautiously.`);
-                            }
-                          }}
-                          style={{
-                            background: 'transparent',
-                            border: '1px solid rgba(79, 224, 168, 0.3)',
-                            color: 'var(--mint)',
-                            padding: '8px 14px',
-                            borderRadius: '8px',
-                            fontSize: '11px',
-                            fontFamily: 'var(--mono)',
-                            cursor: 'pointer',
-                            whiteSpace: 'nowrap'
-                          }}
-                        >
-                          {isCustomPolicyAsset ? '← Preset RWAs' : '+ Custom Token'}
-                        </button>
                       </div>
                       
                       <p style={{ fontSize: '13px', color: '#7a9b90', margin: '0 0 16px' }}>
@@ -1135,7 +1618,7 @@ function AppScreen() {
 
                       <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
                         <motion.button 
-                          onClick={account ? signPolicy : connect} 
+                          onClick={account ? (positions.length > 0 ? signPolicy : () => setShowDepositModal(true)) : connect} 
                           disabled={busy === 'sign' || busy === 'connect'} 
                           className="btn-primary btn-primary-full"
                           whileHover={{ scale: 1.02 }}
@@ -1143,10 +1626,12 @@ function AppScreen() {
                         >
                           {busy === 'sign' || busy === 'connect' ? (
                             <span className="spinner" style={{ borderColor: 'var(--ink)' }} />
-                          ) : account ? (
-                            `Sign ${policyAssetSymbol || ''} Policy On-Chain`
-                          ) : (
+                          ) : !account ? (
                             'Connect Wallet'
+                          ) : positions.length === 0 ? (
+                            '+ Deposit Position to Enable Policy'
+                          ) : (
+                            `Sign Policy for Position #${activePositionNumber} (${activeSelected?.symbol})`
                           )}
                         </motion.button>
                       </div>
@@ -1155,22 +1640,90 @@ function AppScreen() {
 
                   {activeTab === 'Activity' && (
                     <div className="activity">
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                        <h4 style={{ margin: 0 }}>Full Agent Log</h4>
-                        {loadingHistory && <span className="spinner" style={{ borderColor: 'rgba(255,255,255,0.2)' }} />}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                        <div>
+                          <h4 style={{ margin: 0 }}>On-Chain Activity & Guardian Audit Trail</h4>
+                          <span style={{ fontSize: '12px', color: '#7a9b90' }}>
+                            {activeSelected ? `Showing verifiable events for Position #${activePositionNumber} (${activeSelected.symbol})` : 'Recent on-chain events'}
+                          </span>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            if (activeSelected) {
+                              setLoadingHistory(true);
+                              try {
+                                const decisions = await loadDecisionHistory(activeSelected.id);
+                                setHistory(decisions);
+                              } finally {
+                                setLoadingHistory(false);
+                              }
+                            }
+                          }}
+                          disabled={loadingHistory || !activeSelected}
+                          style={{
+                            background: 'rgba(79, 224, 168, 0.1)',
+                            border: '1px solid rgba(79, 224, 168, 0.3)',
+                            color: 'var(--mint)',
+                            padding: '6px 14px',
+                            borderRadius: '8px',
+                            fontSize: '12px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            fontFamily: 'var(--mono)'
+                          }}
+                        >
+                          {loadingHistory ? <span className="spinner" style={{ width: '10px', height: '10px', borderWidth: '1.5px' }} /> : '↻ Refresh'}
+                        </button>
                       </div>
                       
                       {activeHistory.length > 0 ? activeHistory.map((event, i) => (
-                        <div key={event.id} className="event">
-                          <span>{event.at ? formatTime(event.at) : 'Just now'}</span>
-                          <div>
-                            {event.title}
-                            {event.detail && <div style={{ fontSize: '11px', color: '#6d7b74', marginTop: '4px' }}>{event.detail}</div>}
+                        <div key={event.id} className="event" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
+                          <span style={{ minWidth: '70px', fontSize: '11px', color: '#5e7a70', fontFamily: 'var(--mono)' }}>
+                            {event.at ? formatTime(event.at) : 'Just now'}
+                          </span>
+                          <div style={{ flex: 1 }}>
+                            <div className="event-title" style={{ fontWeight: 600, color: 'var(--white)', fontSize: '14px' }}>
+                              {event.title}
+                            </div>
+                            {event.detail && (
+                              <div className="event-detail" style={{ fontSize: '12px', color: '#7a9b90', marginTop: '3px', lineHeight: '1.4' }}>
+                                {event.detail}
+                              </div>
+                            )}
+                            {event.txHash && (
+                              <div style={{ marginTop: '4px' }}>
+                                <a
+                                  href={explorerTxUrl(event.txHash)}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  style={{ color: 'var(--mint)', fontSize: '11px', fontFamily: 'var(--mono)', textDecoration: 'none' }}
+                                >
+                                  View TX ↗
+                                </a>
+                              </div>
+                            )}
                           </div>
-                          <div className="status">{event.kind === 'clear' ? 'CLEAR' : 'MATCH'}</div>
+                          <div
+                            className={`status ${event.kind}`}
+                            style={{
+                              padding: '4px 10px',
+                              borderRadius: '6px',
+                              fontSize: '10px',
+                              fontFamily: 'var(--mono)',
+                              fontWeight: 700,
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.05em'
+                            }}
+                          >
+                            {event.kind === 'clear' ? 'CONFIRMED' : event.kind === 'exit' ? 'EMERGENCY' : event.kind === 'pause' ? 'PAUSED' : event.kind === 'withdraw' ? 'WITHDRAWN' : 'ALERT'}
+                          </div>
                         </div>
                       )) : (
-                        <div style={{ fontSize: '12px', color: '#78968b', padding: '13px 0' }}>No history recorded yet.</div>
+                        <div style={{ fontSize: '13px', color: '#78968b', padding: '24px 0', textAlign: 'center' }}>
+                          No on-chain activity recorded for this position yet. Deposit assets or sign a policy to start the audit log.
+                        </div>
                       )}
                     </div>
                   )}
@@ -1186,6 +1739,158 @@ function AppScreen() {
                         <h4>Policy Registry Contract</h4>
                         <div className="mono" style={{ fontSize: '13px', marginTop: '10px', wordBreak: 'break-all' }}>{contracts.policyRegistry}</div>
                         <div className="sub" style={{ marginTop: '10px' }}><a href={explorerAddressUrl(contracts.policyRegistry)} target="_blank" rel="noreferrer" style={{ color: 'var(--mint)', textDecoration: 'none' }}>View Contract on OKX Explorer ↗</a></div>
+                      </div>
+                    </div>
+                  )}
+
+                  {activeTab === 'Faucet' && activeNetwork === 'testnet' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                      {/* Header */}
+                      <div style={{ padding: '20px 22px', borderRadius: '14px', background: 'rgba(79,224,168,0.06)', border: '1px solid rgba(79,224,168,0.2)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                          <span style={{ fontSize: '22px' }}>🚰</span>
+                          <h4 style={{ margin: 0, font: '600 16px var(--display)', color: 'var(--white)' }}>Testnet Token Faucet</h4>
+                          <span style={{ marginLeft: 'auto', font: '600 10px var(--mono)', background: 'rgba(79,224,168,0.15)', color: 'var(--mint)', padding: '3px 8px', borderRadius: '4px', border: '1px solid rgba(79,224,168,0.3)' }}>X LAYER TESTNET</span>
+                        </div>
+                        <p style={{ margin: 0, fontSize: '13px', color: '#7a9b90', lineHeight: '1.6' }}>
+                          Mint free mock tokens directly to your wallet — no real funds needed. Each mint gives you a batch of tokens you can deposit into Aegis Vault to test the full risk guardian flow.
+                        </p>
+                        <div style={{ marginTop: '12px', padding: '10px 14px', borderRadius: '8px', background: 'rgba(255,200,100,0.06)', border: '1px solid rgba(255,200,100,0.2)', fontSize: '12px', color: '#c8a060' }}>
+                          ⛽ You need a small amount of <b>testnet OKB</b> for gas.{' '}
+                          <a href="https://web3.okx.com/xlayer/faucet" target="_blank" rel="noreferrer" style={{ color: '#e8b870', textDecoration: 'underline' }}>Get 0.2 OKB/day from the X Layer Faucet ↗</a>
+                        </div>
+                      </div>
+
+                      {/* Mint Success Banner */}
+                      {mintSuccess && (
+                        <div style={{
+                          padding: '16px 20px',
+                          borderRadius: '14px',
+                          background: 'rgba(79,224,168,0.12)',
+                          border: '1px solid var(--mint)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '16px',
+                          flexWrap: 'wrap'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <span style={{ fontSize: '24px' }}>🎉</span>
+                            <div>
+                              <div style={{ fontWeight: 700, fontSize: '15px', color: 'var(--mint)' }}>
+                                {mintSuccess.amount} {mintSuccess.symbol} successfully minted!
+                              </div>
+                              <div style={{ fontSize: '12px', color: '#a0c4b8', marginTop: '2px' }}>
+                                Tokens are now in your wallet. You can deposit them into Aegis Vault to open a protected position.
+                              </div>
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                            <a
+                              href={explorerTxUrl(mintSuccess.txHash)}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{
+                                background: 'rgba(79,224,168,0.15)',
+                                color: 'var(--mint)',
+                                border: '1px solid rgba(79,224,168,0.3)',
+                                padding: '8px 14px',
+                                borderRadius: '8px',
+                                fontSize: '12px',
+                                textDecoration: 'none',
+                                fontFamily: 'var(--mono)',
+                                fontWeight: 600
+                              }}
+                            >
+                              View TX ↗
+                            </a>
+                            <button
+                              onClick={() => setShowDepositModal(true)}
+                              className="btn-primary"
+                              style={{ padding: '8px 16px', fontSize: '12px' }}
+                            >
+                              + Deposit into Vault
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Token cards */}
+                      {(Object.entries(TESTNET_TOKENS) as [keyof typeof TESTNET_TOKENS, typeof TESTNET_TOKENS[keyof typeof TESTNET_TOKENS]][]).map(([key, token]) => (
+                        <div key={key} style={{
+                          padding: '18px 20px',
+                          borderRadius: '14px',
+                          background: '#0e211c',
+                          border: '1px solid rgba(79,224,168,0.14)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '16px',
+                          flexWrap: 'wrap'
+                        }}>
+                          {/* Token badge */}
+                          <div style={{
+                            width: '44px', height: '44px', borderRadius: '50%',
+                            background: 'rgba(79,224,168,0.1)', border: '1px solid rgba(79,224,168,0.25)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            font: '700 13px var(--mono)', color: 'var(--mint)', flexShrink: 0
+                          }}>
+                            {key}
+                          </div>
+
+                          {/* Token info */}
+                          <div style={{ flex: 1, minWidth: '140px' }}>
+                            <div style={{ font: '600 14px var(--sans)', color: 'var(--white)', marginBottom: '2px' }}>
+                              {token.symbol}
+                              {key === 'GLDX' && <span style={{ fontSize: '11px', color: '#7a9b90', marginLeft: '8px' }}>Tokenized Gold</span>}
+                              {key === 'SPYX' && <span style={{ fontSize: '11px', color: '#7a9b90', marginLeft: '8px' }}>Tokenized S&P 500</span>}
+                              {key === 'USDC' && <span style={{ fontSize: '11px', color: '#7a9b90', marginLeft: '8px' }}>USD Stablecoin</span>}
+                            </div>
+                            <div style={{ font: '400 11px var(--mono)', color: '#4d7a6a', wordBreak: 'break-all' }}>
+                              {token.address.slice(0, 10)}...{token.address.slice(-6)}
+                            </div>
+                          </div>
+
+                          {/* Drip amount */}
+                          <div style={{ textAlign: 'center', minWidth: '80px' }}>
+                            <div style={{ font: '700 20px var(--mono)', color: 'var(--mint)' }}>{token.faucetAmount}</div>
+                            <div style={{ font: '400 10px var(--mono)', color: '#4d7a6a', textTransform: 'uppercase' }}>per mint</div>
+                          </div>
+
+                          {/* Mint button */}
+                          <motion.button
+                            onClick={account ? (() => void mintTestTokens(key)) : connect}
+                            disabled={!!mintingToken || busy === 'connect'}
+                            style={{
+                              padding: '10px 20px',
+                              borderRadius: '9px',
+                              background: mintingToken === key ? 'rgba(79,224,168,0.15)' : 'var(--mint)',
+                              color: mintingToken === key ? 'var(--mint)' : 'var(--ink)',
+                              border: mintingToken === key ? '1px solid rgba(79,224,168,0.4)' : 'none',
+                              font: '600 13px var(--sans)',
+                              cursor: mintingToken ? 'not-allowed' : 'pointer',
+                              minWidth: '110px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '6px'
+                            }}
+                            whileHover={!mintingToken ? { scale: 1.04 } : {}}
+                            whileTap={!mintingToken ? { scale: 0.96 } : {}}
+                          >
+                            {mintingToken === key ? (
+                              <><span className="spinner" style={{ borderColor: 'rgba(79,224,168,0.3)', borderTopColor: 'var(--mint)', width: '12px', height: '12px', borderWidth: '2px' }} /> Minting...</>
+                            ) : account ? (
+                              `Mint ${token.faucetAmount} ${token.symbol}`
+                            ) : (
+                              'Connect Wallet'
+                            )}
+                          </motion.button>
+                        </div>
+                      ))}
+
+                      {/* After getting tokens nudge */}
+                      <div style={{ padding: '14px 18px', borderRadius: '10px', background: 'rgba(23,59,49,0.4)', border: '1px solid rgba(79,224,168,0.1)', fontSize: '12px', color: '#7a9b90', lineHeight: '1.6' }}>
+                        <b style={{ color: 'var(--mint)' }}>Next steps:</b> Once you have tokens, go to <button onClick={() => setActiveTab('Positions')} style={{ background: 'none', border: 'none', color: 'var(--mint)', cursor: 'pointer', fontWeight: 600, fontSize: '12px', padding: 0, textDecoration: 'underline' }}>Positions</button> → Deposit New Position, then set a risk policy in <button onClick={() => setActiveTab('Policies')} style={{ background: 'none', border: 'none', color: 'var(--mint)', cursor: 'pointer', fontWeight: 600, fontSize: '12px', padding: 0, textDecoration: 'underline' }}>Policies</button> to activate Guardian protection.
                       </div>
                     </div>
                   )}
