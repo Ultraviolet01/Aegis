@@ -24,14 +24,16 @@ An AI model parses plain English statements into explicit, immutable on-chain po
 
 ```mermaid
 graph TD
-    subgraph "Client / User Interface"
+    subgraph "Frontend Layer (Vercel)"
         User["User Wallet (OKX Wallet / MetaMask)"]
         Dashboard["Next.js 15 Web App (aegis-rwa.vercel.app)"]
+        LLM["Anthropic Claude API (Natural Language Policy Parser)"]
     end
 
-    subgraph "Off-Chain AI & Server Infrastructure"
-        LLM["Anthropic Claude API (Policy Parsing)"]
-        Agent["Aegis Risk Guardian Agent (Node.js/TS)"]
+    subgraph "24/7 Autonomous Guardian Worker (Railway)"
+        Agent["Aegis Risk Guardian Agent (Node.js/TS 24/7 Service)"]
+        Monitor["Chain & Oracle Poller (every 5s)"]
+        Executor["Non-Custodial Executor (DRY_RUN=false)"]
         OKX_API["OKX DEX Aggregator API"]
     end
 
@@ -44,20 +46,26 @@ graph TD
 
     User -->|"1. Natural language policy input"| Dashboard
     Dashboard -->|"2. Request policy parse"| LLM
-    LLM -->|"3. Structured policy parameters"| Dashboard
+    LLM -->|"3. Structured policy parameters (BPS)"| Dashboard
     User -->|"4. Sign policy & deposit collateral"| Vault
     Dashboard -->|"5. Store policy hash & parameters"| Registry
 
-    Agent -->|"6. Query DEX liquidity, price impact, and reference prices"| OKX_API
-    Agent -->|"7. Evaluate drawdown vs Policy threshold"| Registry
+    Agent -->|"6. 24/7 Poll open positions & registered policies"| Registry
+    Agent -->|"7. Verify oracle feeds & reference prices"| Oracle
+    Agent -->|"8. Query DEX quotes & price impact"| OKX_API
 
-    Agent --"8. On Breach: Trigger bounded action"--> Vault
-    Vault --"9. Route user-approved % only"--> EVault
-    EVault --"10. 24h Time-lock exit claim"--> User
+    Agent --"9. On Breach: Trigger bounded emergency exit"--> Vault
+    Vault --"10. Route user-approved % only"--> EVault
+    EVault --"11. 24h Non-custodial claim delay"--> User
 
-    Dashboard --"11. Fetch unsigned swap calldata"--> OKX_API
-    User --"12. Sign swap to stablecoins"--> OKX_API
+    Dashboard --"12. Fetch unsigned swap calldata"--> OKX_API
+    User --"13. Sign swap to stablecoins"--> OKX_API
 ```
+
+### ☁️ Infrastructure: Vercel + Railway + X Layer
+* **Vercel**: Hosts the **Next.js 15 web application** and serverless `/api/parse-policy` route. It provides the seamless user portal where users deposit assets, compose plain-English risk policies, and claim recovered collateral.
+* **Railway**: Hosts the **persistent 24/7 Guardian Agent** background worker. Unlike serverless environments that shut down after requests, Railway keeps the TypeScript monitoring loop running continuously around the clock to ensure zero gaps in position protection.
+* **X Layer Testnet (The Shared Bridge)**: Vercel and Railway have no direct private API connection. Instead, **the X Layer blockchain is their shared source of truth**. When a user creates a policy on Vercel, it is signed on-chain; the Railway Guardian detects the new state on-chain, tracks live prices, and executes non-custodial protection transactions directly on-chain.
 
 ---
 
@@ -131,7 +139,39 @@ To test Aegis you need two things — both are free:
 > Make sure your wallet is connected to **X Layer Testnet (Chain ID 1952)** before requesting — the faucet only drips to addresses on the testnet chain.
 
 **2. Testnet mock tokens (tGLDX / tSPYX / tUSDC):**
-> The dashboard has a built-in **🚰 Faucet** tab. Connect your wallet, click **Mint**, and free tokens land directly in your wallet. No approval or real funds required — the mock contracts are open to anyone.
+### 🧪 How to Test a Live Risk Breach on Testnet
+
+To test the entire autonomous de-risking flow end-to-end:
+
+1. **Mint Tokens & Open Position**: Mint `tSPYX` from the **Faucet** tab on [aegis-rwa.vercel.app/app](https://aegis-rwa.vercel.app/app) and deposit a new position in the **Positions** tab.
+2. **Sign a Risk Policy**: In the **Policies** tab, sign a policy such as:
+   > *"If tSPYX drops more than 8%, move 75% to USDC cautiously."*
+3. **Simulate a Market Breach**: Run the testnet price-feed simulator from the project root:
+   ```bash
+   npx tsx agent/wire_spyx_feed.ts
+   # or run the full end-to-end breach trigger:
+   npx tsx agent/trigger-user-breach.ts
+   ```
+4. **Watch the Autonomous Guardian Act**:
+   - The 24/7 Railway Guardian Agent detects the price drop on-chain.
+   - It automatically executes `routeToEmergency(positionId, 7500)` on `AegisVault.sol`.
+   - Your dashboard updates in real-time: an **Emergency Claim Banner** appears on the **Overview** tab, and your protected funds are listed in the **Emergency Claims** tab.
+
+---
+
+### 💡 Why Oracle Updates Are Simulated on Testnet: The Stale Price Guard
+
+In a live production environment on **Mainnet**, Chainlink node networks and live OKX DEX liquidity pools publish fresh market prices automatically every block.
+
+On **Testnet**, mock RWA tokens (`tSPYX`, `tGLDX`) do not have live public trading markets or automated external node runners. 
+
+`RiskOracle.sol` enforces an uncompromising security rule:
+```solidity
+uint256 public staleAfter = 3600; // 1 hour max age
+```
+If an oracle feed has not pushed an on-chain update within 1 hour, `getPrice()` reverts with `StalePrice`.
+
+**This is a core design feature of Aegis: The Guardian Agent will NEVER act on a guess or an outdated price.** When a price feed is stale or unconfigured on testnet, the agent safely logs a warning and skips the position rather than triggering false emergency exits. Pushing a price update via `wire_spyx_feed.ts` refreshes the on-chain timestamp, providing the fresh data required for the Guardian to act.
 
 > ⚠️ **Mainnet deployment exists** (Chain 196) but is not yet open for public use. The live app runs on testnet only.
 
