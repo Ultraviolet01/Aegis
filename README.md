@@ -80,6 +80,30 @@ The core product design strictly separates **autonomous guardian protection** fr
 
 ---
 
+## 🛡️ Emergency Vault: Key Benefits & Security Architecture
+
+A primary innovation in Aegis is the **`EmergencyVault.sol`** design. Automated DeFi tools historically struggled with a fundamental dilemma: *How can an automated AI agent react at lightning speed to market crashes without being granted dangerous custody over user funds?*
+
+The Emergency Vault solves this with a **provably non-custodial, time-locked architecture**:
+
+### 1. Zero-Custody AI Agent Execution
+- The Guardian agent possesses authority to **de-risk** a position (moving volatile assets into safe escrow when a signed drawdown threshold is breached), but **ZERO authority to withdraw, transfer, or redirect those assets**.
+- The `routeToEmergency` function in `AegisVault.sol` hardcodes the destination exclusively to `EmergencyVault.sol` with no custom recipient arguments.
+
+### 2. Immunity to Rogue Agents & Compromised Keys
+- If an off-chain agent server or private key is ever compromised, an attacker gains nothing by triggering unauthorized exits. 
+- Funds are transferred strictly into escrow assigned to the original position owner's wallet address (`msg.sender == owner`). The agent key cannot drain, redirect, or claim those tokens.
+
+### 3. Flash Loan & Oracle Manipulation Resistance
+- In volatile flash crashes or oracle distortions (e.g. temporary DEX liquidity pool manipulation), automated bots that immediately dump tokens to market fall victim to predatory MEV sandwich attacks and selling at the absolute bottom.
+- Aegis routes the **original base tokens directly into safety escrow**, preserving the full asset balance without forcing an adverse market sell while liquidity settles.
+
+### 4. Deterministic Non-Custodial Claims
+- Only the original depositing wallet has the on-chain cryptographic authority to call `EmergencyVault.claim(positionId, claimIndex)`.
+- The 24-hour security window provides a transparent on-chain audit delay, preventing front-running and giving users full visibility and control over their protected capital.
+
+---
+
 ## ⛓️ Testnet Smart Contract Deployments (X Layer Testnet, Chain 1952)
 
 All core smart contracts are deployed, active, and **100% source-verified on OKLink Explorer**:
