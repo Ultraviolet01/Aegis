@@ -75,7 +75,7 @@ export const MAINNET_TOKENS = {
   SPYX: { address: '0x90a2a4c76b5d8c0bc892a69ea28aa775a8f2dd48', symbol: 'SPYX', decimals: 18 },
 } as const;
 
-export const TOKENS = activeNetwork === 'mainnet' ? MAINNET_TOKENS : TESTNET_TOKENS;
+export const TOKENS = TESTNET_TOKENS;
 
 /** Truncate an address for display without hiding the checksum tail. */
 export function shortAddress(address: string): string {
