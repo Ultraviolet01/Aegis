@@ -652,7 +652,7 @@ function AppScreen() {
                 Aegis
               </Link>
               
-              {[...['Overview', 'Positions', 'Emergency Claims', 'Policies', 'Activity', 'Contracts'], ...(activeNetwork === 'testnet' ? ['Faucet'] : [])].map((tab) => {
+              {['Overview', 'Positions', 'Emergency Claims', 'Policies', 'Activity', 'Contracts', 'Faucet'].map((tab) => {
                 const isActive = activeTab === tab;
                 const isFaucet = tab === 'Faucet';
                 const isEmergency = tab === 'Emergency Claims';
@@ -702,7 +702,7 @@ function AppScreen() {
             
             <div className="mainapp">
               <div className="mobile-nav-bar">
-                {[...['Overview', 'Positions', 'Emergency Claims', 'Policies', 'Activity', 'Contracts'], ...(activeNetwork === 'testnet' ? ['Faucet'] : [])].map((tab) => {
+                {['Overview', 'Positions', 'Emergency Claims', 'Policies', 'Activity', 'Contracts', 'Faucet'].map((tab) => {
                   const isEmergency = tab === 'Emergency Claims';
                   const unclaimedCount = claims.filter(c => !c.claimed).length;
                   return (
@@ -1743,7 +1743,7 @@ function AppScreen() {
                     </div>
                   )}
 
-                  {activeTab === 'Faucet' && activeNetwork === 'testnet' && (
+                  {activeTab === 'Faucet' && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                       {/* Header */}
                       <div style={{ padding: '20px 22px', borderRadius: '14px', background: 'rgba(79,224,168,0.06)', border: '1px solid rgba(79,224,168,0.2)' }}>
